@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="Lvwv68AS670LQ8SwITrtlm">
+<head data-page-node-id="7SIcQ4OnYsIzqK68zMJ71I">
+<meta charset="UTF-8" data-page-node-id="RNC8Ob9lQR0h3qUCjE17fM">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="xg2CDOBJYxeMesLDHo9Lae">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>海盐房间 · 交互预览</title>
+<link rel="icon" href="data:," data-page-node-id="VG0butfBw0fUlT9KvjY66C">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #e8ecef; font-family: -apple-system, "PingFang SC", sans-serif; }
+  #app { width: 100%; height: 100%; }
+  canvas { display: block; }
+
+  /* ===== 进入房间的白色幕布（替代旧进度条）：负责 ENTERING 时的淡入覆盖 + 揭幕淡出 ===== */
+  #loading {
+    position: fixed; inset: 0; z-index: 100;
+    background: #ffffff;
+    transition: opacity .6s ease;
+  }
+  #loading.hide { opacity: 0; pointer-events: none; }
+
+  /* ===== Intro：自定义 ✊️ 光标（仅房屋区域，不依赖浏览器 cursor:url） ===== */
+  #introCursor {
+    position: fixed; z-index: 120; pointer-events: none; display: none;
+    font-size: 40px; transform: translate(-50%, -50%);
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,.25));
+  }
+  /* ===== Intro 提示语（WAITING 房间准备中 / READY 轻点进入） ===== */
+  #introHint {
+    position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%);
+    z-index: 110; padding: 10px 22px; border-radius: 24px;
+    background: rgba(255,255,255,.82); backdrop-filter: blur(8px);
+    color: #3b4a56; font-size: 14px; letter-spacing: 1px;
+    box-shadow: 0 4px 18px rgba(50,70,90,.12);
+    opacity: 0; transition: opacity .5s ease; pointer-events: none; white-space: nowrap;
+  }
+  #introHint.show { opacity: 1; }
+
+  /* ===== 底部 Room 加载进度条（极简，非大型 loading 页） ===== */
+  #roomProgress {
+    position: fixed; left: 0; bottom: 0; width: 100%;
+    height: 4px; z-index: 130; opacity: 1;
+    background: rgba(150,170,185,.18);   /* 浅灰蓝轨道 */
+    transition: opacity .8s ease;
+  }
+  #roomProgress.done { opacity: 0; pointer-events: none; }
+  #roomProgressBar {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #7fd0e6, #2f7ba6);  /* 海盐蓝 */
+    transition: width .25s ease;
+  }
+  #roomProgressLabel {
+    position: fixed; right: 12px; bottom: 11px; z-index: 131;
+    font-size: 11px; letter-spacing: .5px; color: #2f7ba6;
+    opacity: .85; transition: opacity .8s ease; pointer-events: none;
+  }
+  #roomProgress.done #roomProgressLabel { opacity: 0; }
+
+  #hint {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    z-index: 50; padding: 10px 22px; border-radius: 24px;
+    background: rgba(255,255,255,.72); backdrop-filter: blur(10px);
+    color: #3b4a56; font-size: 13px; letter-spacing: 1px;
+    box-shadow: 0 4px 18px rgba(50,70,90,.12);
+    display: flex; gap: 16px; align-items: center; white-space: nowrap;
+  }
+  #hint b { color: #2f7ba6; font-weight: 600; }
+  #hint .kbd {
+    display: inline-block; padding: 1px 8px; border-radius: 6px;
+    background: rgba(47,123,166,.12); border: 1px solid rgba(47,123,166,.25);
+    font-size: 12px; color: #2f7ba6;
+  }
+  #mode-tag {
+    position: fixed; top: 22px; left: 50%; transform: translateX(-50%);
+    z-index: 80; padding: 6px 16px; border-radius: 16px;
+    background: rgba(255,255,255,.65); backdrop-filter: blur(8px);
+    color: #2f7ba6; font-size: 12px; letter-spacing: 2px;
+    opacity: 0; transition: opacity .4s ease; pointer-events: none;
+  }
+  #mode-tag.show { opacity: 1; }
+
+  /* ===== 电脑点击：毛玻璃遮罩 + Win95 记事本窗口 ===== */
+  #laptopOverlay {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    background: rgba(25,35,55,0); backdrop-filter: blur(0px);
+    transition: opacity .45s ease, background .65s ease, backdrop-filter .65s ease;
+  }
+  #laptopOverlay.show {
+    opacity: 1; pointer-events: auto;
+    background: rgba(25,35,55,.20);
+    backdrop-filter: blur(16px) saturate(1.15);
+  }
+  .np-window {
+    width: min(900px, 90vw);
+    background: #c6c6c6;
+    border: 2px solid; border-color: #ffffff #6f6f6f #6f6f6f #ffffff;
+    box-shadow: 4px 4px 0 rgba(0,0,0,.30), 0 24px 60px rgba(20,40,70,.35);
+    transform: scale(.92) translateY(14px);
+    transition: transform .5s cubic-bezier(.2,1.3,.4,1);
+  }
+  #laptopOverlay.show .np-window { transform: scale(1) translateY(0); }
+  .np-title {
+    display: flex; justify-content: space-between; align-items: center;
+    background: linear-gradient(90deg, #000080, #1084d0);
+    color: #fff; font-weight: 700; font-size: 14px; padding: 5px 8px;
+  }
+  .np-btns { display: flex; gap: 3px; }
+  .np-btns i {
+    font-style: normal; width: 22px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    background: #c6c6c6; border: 2px solid; border-color: #fff #6f6f6f #6f6f6f #fff;
+    color: #000; font-size: 12px; cursor: pointer;
+  }
+  .np-menu {
+    display: flex; gap: 18px; padding: 5px 10px;
+    font-size: 13px; color: #222; border-bottom: 1px solid #9a9a9a;
+  }
+  .np-body {
+    height: min(62vh, 540px); margin: 8px;
+    background: #fff;
+    border: 2px solid; border-color: #6f6f6f #fff #fff #6f6f6f;
+  }
+
+  /* ===== 物品浮层：毛玻璃背景 + 主体图片（书本/唱片机/打字机共用） ===== */
+  #booksOverlay, #recordOverlay, #typeOverlay {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    background: rgba(240,247,255,0); backdrop-filter: blur(0px);
+    transition: opacity .45s ease, background .5s ease, backdrop-filter .5s ease;
+  }
+  #booksOverlay.show, #recordOverlay.show, #typeOverlay.show {
+    opacity: 1; pointer-events: auto;
+    background: rgba(240,247,255,.10);
+    backdrop-filter: blur(18px) saturate(1.1);
+  }
+  /* ===== 物品浮层：毛玻璃背景 + SVG 矢量重构主体（书本/唱片机/打字机，与电脑记事本同路径） ===== */
+  #booksOverlay svg, #recordOverlay svg, #typeOverlay svg {
+    width: min(420px, 58vw); height: auto;
+    transform: scale(.78);
+    transition: transform .5s cubic-bezier(.2,1.5,.4,1);
+    filter: drop-shadow(0 24px 50px rgba(40,70,110,.35));
+  }
+  #booksOverlay.show svg, #recordOverlay.show svg, #typeOverlay.show svg { transform: scale(1); }
+  /* 打字机：大图展示，底边与页面底边重合 */
+  #typeOverlay { align-items: flex-end; }
+  #typeOverlay svg { height: min(112vh, 220vw); width: auto; margin-bottom: -5vh; }
+  #recordOverlay svg { width: min(440px, 60vw); }
+
+  /* ===== 唱片机提示 toast ===== */
+  #musicToast {
+    position: fixed; left: 50%; bottom: 86px; z-index: 70;
+    transform: translateX(-50%) translateY(10px);
+    padding: 9px 20px; border-radius: 22px;
+    background: rgba(30,40,55,.78); backdrop-filter: blur(6px);
+    color: #fff; font-size: 13px; letter-spacing: 1px;
+    opacity: 0; transition: opacity .35s ease, transform .35s ease;
+    pointer-events: none;
+  }
+  #musicToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body data-page-node-id="owtotAQsyHifXImttjPYSK">
+<div id="app" data-page-node-id="yw0qRvJwlirT66sKGGpshA"></div>
+
+<div id="loading" data-page-node-id="ai9j7xK8dJUrrbXhtgbsFy"></div>
+
+<!-- Intro：自定义 ✊️ 光标 + 提示语 -->
+<div id="introCursor">✊️</div>
+<div id="introHint"></div>
+
+<div id="roomProgress" aria-hidden="true">
+  <div id="roomProgressLabel">Loading room 0%</div>
+  <div id="roomProgressBar"></div>
+</div>
+<div id="hint" data-page-node-id="PM8LYxqHuPK5oEQuoq6z22">
+  <span data-page-node-id="e7QHAwAQAswYH5TuMVacL8">🖱 移动鼠标 <b data-page-node-id="OLQjfJMdGEWs1Cgfca33pz">环视</b></span>
+  <span data-page-node-id="pDBvGtOI924MJ5TtTGTQAr">💡 单击<b data-page-node-id="UwlJHO25rXTLx4kn3O6We0">灯</b> 开关灯光</span>
+  <span data-page-node-id="xp8zSNMk40wlFePPm4W9VQ">🪟 单击<b data-page-node-id="k0FNzpeTjGfRexeKRBDwfU">窗</b> 开关阳光</span>
+  <span data-page-node-id="OwkmKkRABpCA8DGEpfnjf5">✨ 悬停 <b data-page-node-id="nNbLRwjvKQET8pGXaLU92J">电脑 · 唱片机 · 书本 · 打字机</b> 点击互动</span>
+  <span data-page-node-id="VG6XaKQGi6Wyf0Q26OwFsp"><span class="kbd" data-page-node-id="toG9gIy4aqLM5QXBC6wfyw">右键</span>/<span class="kbd" data-page-node-id="CP6pYxPxwLHlnnbDrgRv0H">Esc</span> 返回</span>
+</div>
+<div id="mode-tag" data-page-node-id="Ec3yIQ4Qfy0oZM6YWp3Xsu">📖 特写 — 右键返回全景</div>
+
+<!-- 电脑：毛玻璃 + 记事本窗口 -->
+<div id="laptopOverlay" data-page-node-id="1Ntk5X7kwqFpd6UC32O2qn">
+  <div class="np-window" data-page-node-id="3W9VkQB6G9UsA2DDMzLl6N">
+    <div class="np-title" data-page-node-id="pGlUexpHB5ZN5mxXOiLa0y">
+      <span data-page-node-id="cuqT2IQejlXZfXXXUAXsZd">Untitled - Notepad</span>
+      <span class="np-btns" data-page-node-id="sYMJsA0u9YWT87Pgb704cw"><i data-page-node-id="ffR9OO4EAtTzo8apx3JUd5">_</i><i data-page-node-id="NEGTTkr0lMyYxPLecsbfOI">□</i><i id="npClose" data-page-node-id="eNssn0lQTyMPZJPovrBrvK">×</i></span>
+    </div>
+    <div class="np-menu" data-page-node-id="rGtwEcvtSTxXSf8ATFyoCn"><span data-page-node-id="hxODOG2tyv2HrTi8YZpuDB">File</span><span data-page-node-id="SkN17FYPKFbz5tUUjjVwrr">Edit</span><span data-page-node-id="5RsPreKhlQB6DEDuKUQevr">Search</span><span data-page-node-id="WrZog52F1O1Hq9t3uIJNWW">Help</span></div>
+    <div class="np-body" id="npBody" data-page-node-id="QSENI0SEzXzGUntMGCBFg2"><!-- 后期内容区 --></div>
+  </div>
+</div>
+
+<!-- 书本：毛玻璃 + SVG 重构文件夹 -->
+<div id="booksOverlay" data-page-node-id="NGeg9Ly6LF3moJbcUkamPH">
+  <svg viewBox="0 0 340 300" xmlns="http://www.w3.org/2000/svg" aria-label="文件夹">
+    <defs>
+      <clipPath id="fdClip"><rect x="18" y="76" width="304" height="206" rx="24"/></clipPath>
+      <linearGradient id="fdBack" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#b6d5ef"/><stop offset="1" stop-color="#a3c8e8"/>
+      </linearGradient>
+    </defs>
+    <!-- 背板 + 标签耳 -->
+    <path d="M18 62 q0 -18 18 -18 h84 q15 0 22 13 l9 19 h173 q16 0 16 16 v184 q0 18 -18 18 H36 q-18 0 -18 -18 Z" fill="url(#fdBack)"/>
+    <!-- 前面板：竖条纹 -->
+    <g clip-path="url(#fdClip)">
+      <rect x="18" y="76" width="304" height="206" fill="#c9e0f4"/>
+      <g fill="#dcEBf8">
+        <rect x="36" y="76" width="24" height="206"/><rect x="80" y="76" width="24" height="206"/>
+        <rect x="124" y="76" width="24" height="206"/><rect x="168" y="76" width="24" height="206"/>
+        <rect x="212" y="76" width="24" height="206"/><rect x="256" y="76" width="24" height="206"/>
+        <rect x="300" y="76" width="24" height="206"/>
+      </g>
+      <!-- 顶部内阴影 -->
+      <rect x="18" y="76" width="304" height="14" fill="#9fc4e2" opacity=".55"/>
+    </g>
+  </svg>
+</div>
+
+<!-- 唱片机：毛玻璃 + SVG 重构主体 -->
+<div id="recordOverlay" data-page-node-id="PKptggkpn7gVDNZ2doIf4K">
+  <svg viewBox="0 0 600 620" xmlns="http://www.w3.org/2000/svg" aria-label="唱片机">
+    <defs>
+      <radialGradient id="rcBody" cx="35%" cy="28%" r="95%">
+        <stop offset="0" stop-color="#e4e4e4"/><stop offset="1" stop-color="#cccccc"/>
+      </radialGradient>
+      <radialGradient id="rcDisc" cx="45%" cy="40%" r="75%">
+        <stop offset="0" stop-color="#222222"/><stop offset="1" stop-color="#090909"/>
+      </radialGradient>
+      <linearGradient id="rcArm" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#909090"/><stop offset=".5" stop-color="#ececec"/><stop offset="1" stop-color="#8a8a8a"/>
+      </linearGradient>
+    </defs>
+    <!-- 机身 -->
+    <rect x="8" y="8" width="584" height="604" rx="44" fill="url(#rcBody)"/>
+    <rect x="8" y="8" width="584" height="604" rx="44" fill="none" stroke="#bdbdbd" stroke-width="2"/>
+    <!-- 转盘 + 黑胶 -->
+    <circle cx="280" cy="312" r="252" fill="#c2c2c2"/>
+    <circle cx="280" cy="312" r="236" fill="url(#rcDisc)"/>
+    <g fill="none" stroke="#2e2e2e" stroke-width="1.8" opacity=".85">
+      <circle cx="280" cy="312" r="204"/><circle cx="280" cy="312" r="178"/>
+      <circle cx="280" cy="312" r="152"/><circle cx="280" cy="312" r="126"/>
+    </g>
+    <!-- 中心白圆 -->
+    <circle cx="280" cy="312" r="95" fill="#ffffff"/>
+    <circle cx="280" cy="312" r="7" fill="#b0b0b0"/>
+    <!-- 左上 logo -->
+    <circle cx="82" cy="92" r="21" fill="none" stroke="#a6a6a6" stroke-width="3.5"/>
+    <circle cx="90" cy="100" r="5.5" fill="#a6a6a6"/>
+    <!-- 唱臂：底座 + 配重 + 臂管 + 唱头 -->
+    <circle cx="502" cy="108" r="35" fill="#c6c6c6"/>
+    <circle cx="502" cy="108" r="21" fill="url(#rcArm)"/>
+    <rect x="490" y="32" width="24" height="46" rx="10" fill="url(#rcArm)"/>
+    <path d="M502 122 L502 424 Q502 512 444 538 L420 546" fill="none" stroke="url(#rcArm)" stroke-width="13" stroke-linecap="round"/>
+    <g transform="rotate(24 420 546)">
+      <rect x="392" y="533" width="58" height="27" rx="6" fill="#8d8d8d"/>
+      <rect x="399" y="539" width="21" height="15" rx="3" fill="#6d6d6d"/>
+    </g>
+    <!-- 左下按钮 + 开关 -->
+    <circle cx="72" cy="516" r="16" fill="#bfbfbf"/>
+    <circle cx="72" cy="516" r="9" fill="#9d9d9d"/>
+    <rect x="50" y="552" width="38" height="58" rx="17" fill="#3e3e3e"/>
+    <rect x="56" y="558" width="26" height="30" rx="12" fill="#5c5c5c"/>
+    <text x="34" y="606" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#8f8f8f">Off</text>
+    <text x="96" y="606" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#8f8f8f">On</text>
+  </svg>
+</div>
+
+<!-- 打字机：毛玻璃 + SVG 重构主体（paper 分组独立，后期做滚轮滚动） -->
+<div id="typeOverlay" data-page-node-id="YXeXcYGDQtCreqLP1Ljsdu">
+  <svg viewBox="0 0 440 520" xmlns="http://www.w3.org/2000/svg" aria-label="打字机">
+    <defs>
+      <linearGradient id="twBody" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#f5edD5"/><stop offset="1" stop-color="#e9dcbc"/>
+      </linearGradient>
+      <linearGradient id="twRail" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#e8e8e8"/><stop offset="1" stop-color="#a5a5a5"/>
+      </linearGradient>
+    </defs>
+    <!-- 纸带（独立分组：后期随滚轮上下滚动） -->
+    <g id="twPaper">
+      <rect x="92" y="0" width="256" height="302" fill="#faf6ea"/>
+      <rect x="92" y="0.5" width="255" height="301" fill="none" stroke="#e9e1c9" stroke-width="1.5"/>
+    </g>
+    <!-- 字车导轨 -->
+    <rect x="112" y="298" width="216" height="17" rx="8.5" fill="url(#twRail)"/>
+    <rect x="146" y="287" width="27" height="14" rx="5" fill="#3c3c3c"/>
+    <rect x="267" y="287" width="27" height="14" rx="5" fill="#3c3c3c"/>
+    <!-- 两侧墨带卷轴（绿） -->
+    <g>
+      <circle cx="50" cy="332" r="37" fill="#7db98d"/>
+      <circle cx="50" cy="332" r="23" fill="#5da271"/>
+      <circle cx="50" cy="332" r="7" fill="#3f7a52"/>
+      <circle cx="390" cy="332" r="37" fill="#7db98d"/>
+      <circle cx="390" cy="332" r="23" fill="#5da271"/>
+      <circle cx="390" cy="332" r="7" fill="#3f7a52"/>
+    </g>
+    <!-- 换行扳手 -->
+    <path d="M80 322 L46 374 L30 368" fill="none" stroke="#cbcbcb" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- 机身 -->
+    <path d="M26 354 q0 -20 22 -20 h344 q22 0 22 20 V520 H26 Z" fill="url(#twBody)" stroke="#d9c9a2" stroke-width="2"/>
+    <rect x="26" y="334" width="388" height="8" fill="#d9cba6" opacity=".7"/>
+    <!-- 导纸板 -->
+    <path d="M194 334 h52 v16 q0 10 -10 10 h-32 q-10 0 -10 -10 Z" fill="#cfcfcf" stroke="#9f9f9f" stroke-width="1.5"/>
+    <!-- 字锤扇形 -->
+    <g stroke="#33332e" stroke-width="5" stroke-linecap="round">
+      <line x1="220" y1="400" x2="156" y2="356"/><line x1="220" y1="400" x2="176" y2="346"/>
+      <line x1="220" y1="400" x2="198" y2="340"/><line x1="220" y1="400" x2="220" y2="338"/>
+      <line x1="220" y1="400" x2="242" y2="340"/><line x1="220" y1="400" x2="264" y2="346"/>
+      <line x1="220" y1="400" x2="284" y2="356"/>
+    </g>
+    <path d="M160 402 Q220 374 280 402 L258 428 Q220 410 182 428 Z" fill="#3a3a34"/>
+    <!-- 色带卷轴 -->
+    <circle cx="186" cy="400" r="13" fill="#8d8d8d"/><circle cx="186" cy="400" r="5" fill="#5f5f5f"/>
+    <circle cx="254" cy="400" r="13" fill="#8d8d8d"/><circle cx="254" cy="400" r="5" fill="#5f5f5f"/>
+    <!-- 功能按钮（红/橙） -->
+    <circle cx="346" cy="430" r="11" fill="#d9483b"/>
+    <circle cx="374" cy="430" r="11" fill="#e8a33d"/>
+    <!-- 后排按键 -->
+    <g stroke="#d6c8a4" stroke-width="2">
+      <circle cx="84" cy="478" r="17" fill="#7fb98a"/>
+      <circle cx="130" cy="478" r="17" fill="#f2e8cd"/><circle cx="176" cy="478" r="17" fill="#f2e8cd"/>
+      <circle cx="222" cy="478" r="17" fill="#f2e8cd"/><circle cx="268" cy="478" r="17" fill="#f2e8cd"/>
+      <circle cx="314" cy="478" r="17" fill="#f2e8cd"/><circle cx="360" cy="478" r="17" fill="#7fb98a"/>
+    </g>
+    <!-- 前排按键（底部被页面边缘裁切） -->
+    <g stroke="#d6c8a4" stroke-width="2">
+      <circle cx="106" cy="524" r="21" fill="#7fb98a"/>
+      <circle cx="158" cy="524" r="21" fill="#f2e8cd"/><circle cx="210" cy="524" r="21" fill="#f2e8cd"/>
+      <circle cx="262" cy="524" r="21" fill="#f2e8cd"/><circle cx="314" cy="524" r="21" fill="#f2e8cd"/>
+      <circle cx="366" cy="524" r="21" fill="#7fb98a"/>
+    </g>
+  </svg>
+</div>
+
+<div id="musicToast" data-page-node-id="SM8UlCYeFGpu8Vbzsu8vSy"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ================= 基础场景 ================= */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xdde5ea);
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
+
+/* 后处理：OutlinePass 用于悬停物品的边缘发光 */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
+outlinePass.edgeStrength = 5;
+outlinePass.edgeGlow = 1.0;
+outlinePass.edgeThickness = 2;
+outlinePass.visibleEdgeColor.set(0xffe6a8);
+outlinePass.hiddenEdgeColor.set(0x8899aa);
+composer.addPass(outlinePass);
+composer.addPass(new OutputPass());
+
+/* 基础灯光（自然亮度、不投射阴影）：
+   仅当「灯关 或 窗开」时点亮，提供"常亮"自然光；灯开且窗关时关闭。 */
+const baseLights = [];
+const hemiLight = new THREE.HemisphereLight(0xfff8f0, 0xc6bcaa, 0.75);
+baseLights.push(hemiLight); scene.add(hemiLight);
+const sunDir = new THREE.DirectionalLight(0xfff1e2, 0.45);
+sunDir.position.set(6, 12, 8);
+baseLights.push(sunDir); scene.add(sunDir);
+const fillDir = new THREE.DirectionalLight(0xe2e4ea, 0.18);
+fillDir.position.set(-6, 6, 10);
+baseLights.push(fillDir); scene.add(fillDir);
+baseLights.forEach(L => L.userData.baseI = L.intensity);
+
+/* 常亮基础光开关：开灯且关窗 → 关闭；其余 → 自然亮度 */
+function updateBase() {
+  const on = (!state.lampsOn) || state.sunOn;
+  baseLights.forEach(L => { L.intensity = on ? L.userData.baseI : 0; });
+}
+
+/* ================= 机位定义 ================= */
+const HOME = {
+  base: new THREE.Vector3(0, 2.55, 9.6),
+  target: new THREE.Vector3(0, 2.05, 0)
+};
+/* 电脑特写机位（加载后按电脑实际位置计算） */
+const LAPCAM = { pos: null, tgt: null };
+/* 书本/唱片机/打字机特写机位（加载后计算），与电脑一致：镜头先拉近再弹层 */
+const BOOKCAM = { pos: null, tgt: null };
+const RECCAM = { pos: null, tgt: null };
+const TYCAM = { pos: null, tgt: null };
+const ITEM_CAMS = { laptop: LAPCAM, books: BOOKCAM, record: RECCAM, typewriter: TYCAM };
+/* 环视约束 */
+const ORBIT = { x: 2.0, tgtX: 1.4, yMin: 1.2, yMax: 4.6, zMin: 8.6, zMax: 10.4 };
+
+/* ================= 可交互元素状态 ================= */
+let model = null;
+let lampLensMeshes = [];
+let lampLights = [];
+let glassMesh = null;
+let coverMesh = null;
+let sunShaft = null;
+let chairCenter = null;      // 苹果椅中心（用于打字机朝向）
+let booksGroup = null;       // 书本分组
+const interactables = [];    // 可交互物品注册表（模块级：鼠标事件链路要用）
+
+const state = { mode: 'home', lampsOn: true, sunOn: true, musicOn: false };
+
+/* ================= 3D 房屋坠落 Intro（与房间加载并行，不阻塞房间） =================
+   设计要点：
+   - 独立 introScene / introCamera，白底、无后处理（轻量，不引入 Rapier/GSAP 等第二套框架）。
+   - 房屋用「手动 Euler 积分」实现坠落物理（参数见 introConfig）。
+   - 状态机：LOADING→DROP→SETTLING→MAILBOX_REVEAL→CAMERA_DOLLY→WAITING→READY→ENTERING→ROOM
+   - 房间后台加载，roomReady 后才允许 READY→进入。
+   ================================================================================ */
+const introConfig = {
+  // —— 物理（手动积分；要真实刚体可改引 Rapier，但会引入第二套框架，按需求保持单框架）——
+  houseStartHeight: 5.0,    // 起始坠落高度（距落点上方），调大=掉得更狠/更久
+  gravity: 15,              // 重力加速度（越大落得越快）
+  restitution: 0.22,        // 落地回弹系数（0=不弹，0.3=轻微弹）
+  linearDamping: 0.4,       // 线性阻尼（空气阻力感）
+  angularDamping: 6.5,      // 角阻尼（抑制翻滚，越大越稳）
+  settleThreshold: 0.12,    // 视为静止的速度阈值
+  settleTime: 0.45,         // SETTLING 阶段停留时间（s）
+  // —— 邮箱（确定性动画，不用物理）——
+  mailboxRotationStart: -1.25, // 入场起始旋转（弧度，约 -72°）
+  mailboxRotationEnd: 0,       // 最终旋转
+  mailboxAnimDur: 0.7,         // 邮箱弹出时长（s），含 overshoot
+  mailboxScale: 1,
+  mailboxHeightRatio: 0.40, // 邮箱目标高度 ≈ 房屋高度 40%（辅助物件，明显小于房屋）
+  // —— 房屋悬停 / 敲门 ——
+  houseHoverScale: 1.03,    // READY 悬停放大倍数
+  knockDuration: 0.26,      // 点击后敲门震动时长（s）
+  // —— 阴影（groundMat.opacity 随高度在 [shadowOpacityFar, shadowOpacityNear] 间插值）——
+  shadowOpacityNear: 0.34,  // 近地阴影（深）
+  shadowOpacityFar: 0.06,   // 高空阴影（淡）
+  // —— 相机运镜：落地后“摄影机走近房子”，而非“房子被放大 / 抬升” ——
+  cameraFocusHeightRatio: 0.43, // 稳定焦点高度 = restY + H*ratio（位于房屋几何中心略下方）
+  cameraHoldAfterLanding: 0.30, // 落地后保持远景不变的时间（s），避免落地瞬间重新构图
+  cameraDollyDuration: 1.5,     // 推镜（CAMERA_DOLLY）时长（s）
+  cameraDollyForward: 0.72,     // 终点相对起点沿前进方向的比例（Z 明显前进，产生透视 / Parallax）
+  cameraDollyDrop: 0.20,        // 推镜过程相对起点高度的下降比例（轻微下降，不俯冲）
+  cameraDollySide: 0.35,        // 向房屋 + 邮箱方向横移比例
+  cameraPathCurve: 'catmull',   // 路径插值方式（CatmullRomCurve3 + easeInOutCubic）
+  cameraFarDistance: 6,            // 远景机位 Z 距离（落地后房屋完整可见）
+  cameraFarTargetBelowFocus: 0,    // 远景注视点 = 房屋几何中心（houseRestY）：落地后房屋主体位于页面正中（≈50% Y），不故意向下看
+  cameraCloseDistanceRatio: 2.15,  // 推镜终点距离 = H * ratio（正视机位下房屋正面轮廓占屏高 ≈66%，落在 55%~70% 验收带内）
+  cameraCloseHeightRatio: 0,       // Closeup 相机高度 = houseRestY + H*ratio（0 = 与房屋中心等高 → 正视，不俯视）
+  houseScreenTargetY: 0.50,        // 房屋视觉中心目标位置 = viewport 50% Y（验收参考，靠相机构图实现）
+  closeupHouseScreenHeight: 0.62,  // Closeup 房屋目标占屏高（验收参考，主要靠 cameraCloseDistanceRatio 调整）
+  progressBarHeight: 4,            // 底部 Room 加载进度条高度（px）
+  // —— 手动覆盖机位（留空则按房屋尺寸自动计算；填 THREE.Vector3 覆盖）——
+  farCameraPos: null, farTarget: null,
+  closeupCameraPos: null, closeupTarget: null,
+  cameraDamping: 0.0016,    // 仅 LOADING 阶段相机插值阻尼（DOLLY 改用明确时长，不受此影响）
+};
+
+// 状态机
+const INTRO = {
+  phase: 'LOADING',  // LOADING→DROP→SETTLING→MAILBOX_REVEAL→CAMERA_DOLLY→WAITING→READY→ENTERING→ROOM
+  t: 0, phaseStart: 0,
+  roomReady: false, houseReady: false, mailReady: false,
+  houseHovered: false, settleTimer: 0, mailAnimStart: 0, mailDone: 0, enterStart: 0,
+  curtainIn: false, swapped: false,
+};
+function setIntroPhase(p) { INTRO.phase = p; INTRO.phaseStart = INTRO.t; }
+window.__intro = INTRO;   // 便于自动化验证读取状态机相位 / roomReady
+
+/* Intro 独立场景 / 相机（白底、轻量、无后处理） */
+const introScene = new THREE.Scene();
+introScene.background = new THREE.Color(0xffffff);
+const introCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 300);
+const introHemi = new THREE.HemisphereLight(0xffffff, 0xdfe3e8, 1.0); introScene.add(introHemi);
+const introDir = new THREE.DirectionalLight(0xffffff, 1.15);
+introDir.position.set(5, 12, 7); introDir.castShadow = true;
+introDir.shadow.mapSize.set(2048, 2048); introDir.shadow.radius = 7; introDir.shadow.bias = -0.0005;
+{ const sc = introDir.shadow.camera; sc.near = 1; sc.far = 70; sc.left = -16; sc.right = 16; sc.top = 16; sc.bottom = -16; }
+introScene.add(introDir); introScene.add(introDir.target);
+const groundMat = new THREE.ShadowMaterial({ opacity: 0.3 });
+const groundPlane = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), groundMat);
+groundPlane.rotation.x = -Math.PI / 2; groundPlane.receiveShadow = true; introScene.add(groundPlane);
+
+let house = null, mailbox = null, mailboxPivot = null, mailboxTargetScale = 1;
+const houseBox = new THREE.Box3();
+const houseSize = new THREE.Vector3();
+const houseLocalCenter = new THREE.Vector3();
+let houseRestY = 0;
+const houseVel = new THREE.Vector3();
+const houseAngVel = new THREE.Vector3();
+let houseHoverSphere = null;
+let mailMX = 0, mailMZ = 0;
+// 相机机位：far = 稳定的远景机位（DROP/SETTLING/MAILBOX 共用，落地后不重新构图）；
+// closeup = 推镜终点（房屋 + 邮箱正面近景）。当前注视点 introCamCurTgt 在 DOLLY 时平滑跟随稳定焦点。
+const introCameras = {
+  far: new THREE.Vector3(0, 3, 14), farTgt: new THREE.Vector3(0, 1, 0),
+  closeup: new THREE.Vector3(0, 3, 14), closeupTgt: new THREE.Vector3(0, 1, 0),
+};
+// 推镜路径（CAMERA_DOLLY 阶段使用）：记录真实起点/终点并构建空间曲线，避免“无限 lerp 到预设”
+const dolly = {
+  startPos: new THREE.Vector3(), startTgt: new THREE.Vector3(),
+  endPos: new THREE.Vector3(), endTgt: new THREE.Vector3(),
+  curve: null, builtAt: -1,
+};
+const introCamCurTgt = new THREE.Vector3(0, 1, 0);
+introCamera.position.copy(introCameras.far);
+introCamera.lookAt(introCamCurTgt);
+
+const introLoader = new GLTFLoader();
+introLoader.load('./toyhouse_20260918.glb', (g) => {
+  house = g.scene;
+  house.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  houseBox.setFromObject(house);
+  houseSize.copy(houseBox.getSize(new THREE.Vector3()));
+  const c0 = houseBox.getCenter(new THREE.Vector3());
+  houseLocalCenter.copy(c0).sub(house.position);
+  houseRestY = -houseBox.min.y;
+  house.position.set(0, houseRestY + introConfig.houseStartHeight, 0);
+  house.rotation.set((Math.random() - 0.5) * 0.22, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.18);
+  houseVel.set(0, 0, 0);
+  houseAngVel.set((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.4);
+  introScene.add(house);
+  houseHoverSphere = new THREE.Sphere(
+    new THREE.Vector3(0, houseRestY + houseLocalCenter.y, 0),
+    houseBox.getBoundingSphere(new THREE.Sphere()).radius * 1.04
+  );
+  INTRO.houseReady = true;
+  INTRO.debug = { size: { x: houseSize.x, y: houseSize.y, z: houseSize.z }, restY: houseRestY };
+  computeIntroCameras();
+  setIntroPhase('DROP');
+}, undefined, (e) => console.warn('房屋加载失败:', e.message));
+
+introLoader.load('./postbox_20260918.glb', (g) => {
+  mailbox = g.scene;
+  mailbox.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  const mb = new THREE.Box3().setFromObject(mailbox);
+  const mbSize = mb.getSize(new THREE.Vector3());
+  const mbCenter = mb.getCenter(new THREE.Vector3());
+  // 邮筒按房屋高度缩放：目标高度 ≈ 房屋高度的 mailboxHeightRatio（辅助物件，明显小于房屋）
+  mailboxTargetScale = (houseSize.y * introConfig.mailboxHeightRatio) / Math.max(0.0001, mbSize.y);
+  // 紧贴房屋右前方：按两者半宽/半深留出合理小间隙（邮箱缩小后同步收近距离，避免过度留白）
+  mailMX = houseSize.x * 0.5 + mbSize.x * mailboxTargetScale * 0.5 + 0.10;
+  mailMZ = houseSize.z * 0.30 + mbSize.z * mailboxTargetScale * 0.5 + 0.10;
+  // 用 pivot 包一层，把旋转/缩放轴放到邮筒"底面中心"，避免绕偏心点甩动
+  mailbox.position.set(-mbCenter.x, -mb.min.y, -mbCenter.z);
+  mailboxPivot = new THREE.Group();
+  mailboxPivot.add(mailbox);
+  mailboxPivot.position.set(mailMX, 0, mailMZ);
+  mailboxPivot.rotation.y = introConfig.mailboxRotationStart;
+  mailboxPivot.scale.setScalar(0.0001);
+  introScene.add(mailboxPivot);
+  INTRO.mailReady = true;
+  INTRO.debug = Object.assign(INTRO.debug || {}, { mail: { x: mailMX, z: mailMZ }, mailH: mbSize.y, mbScale: mailboxTargetScale });
+}, undefined, (e) => console.warn('邮箱加载失败:', e.message));
+
+function computeIntroCameras() {
+  const H = houseSize.y;
+  // 落地后房屋几何中心（世界 Y）＝ 底部 restY + H/2。注意：本模型 restY 是“底面”而非中心。
+  const houseCenterY = houseRestY + H * 0.5;
+  // 稳定焦点：位于房屋几何中心略下方（= restY + H*ratio），全程不随阶段重算
+  const focusY = houseRestY + H * introConfig.cameraFocusHeightRatio;
+  INTRO.focusY = focusY;
+  const far = introCameras.far, farTgt = introCameras.farTgt;
+  // 远景机位（DROP/SETTLING/MAILBOX 共用）：注视房屋几何中心 → 落地后房屋整体位于页面正中（≈50% Y），
+  // 不随阶段重算、不重新构图（cameraFarTargetBelowFocus=0 即注视房屋中心）。
+  far.set(0, focusY + 3.2, introConfig.cameraFarDistance);
+  farTgt.set(0, houseCenterY - introConfig.cameraFarTargetBelowFocus, 0);
+  // 推镜终点（房屋 + 邮箱正面近景）：相机正对房屋、x≈0；高度与房屋中心等高（正视，不俯视），
+  // 房屋中心保持屏幕正中 → 上下留白一致；邮箱自然落在右侧（不向右偏）。
+  const closeDist = Math.max(H * introConfig.cameraCloseDistanceRatio, 1.4);
+  introCameras.closeup.set(0, houseCenterY + H * introConfig.cameraCloseHeightRatio, closeDist);
+  introCameras.closeupTgt.set(0, houseCenterY, 0);
+  // 手动覆盖（如填写则优先）
+  if (introConfig.farCameraPos) far.copy(introConfig.farCameraPos);
+  if (introConfig.farTarget) farTgt.copy(introConfig.farTarget);
+  if (introConfig.closeupCameraPos) introCameras.closeup.copy(introConfig.closeupCameraPos);
+  if (introConfig.closeupTarget) introCameras.closeupTgt.copy(introConfig.closeupTarget);
+  // 房屋尚未正式开始 DROP 前，先把相机放到远景机位
+  if (INTRO.phase === 'LOADING') {
+    introCamera.position.copy(far);
+    introCamCurTgt.copy(farTgt);
+    introCamera.lookAt(farTgt);
+  }
+}
+
+function easeOutBack(t) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+
+function introPhysics(dt) {
+  houseVel.y -= introConfig.gravity * dt;
+  houseVel.multiplyScalar(Math.max(0, 1 - introConfig.linearDamping * dt));
+  house.position.addScaledVector(houseVel, dt);
+  house.rotation.x += houseAngVel.x * dt;
+  house.rotation.y += houseAngVel.y * dt;
+  house.rotation.z += houseAngVel.z * dt;
+  houseAngVel.multiplyScalar(Math.max(0, 1 - introConfig.angularDamping * dt));
+  if (house.position.y <= houseRestY) {
+    house.position.y = houseRestY;
+    houseVel.y = (Math.abs(houseVel.y) > introConfig.settleThreshold) ? -houseVel.y * introConfig.restitution : 0;
+  }
+  if (house.position.y <= houseRestY + 0.002 && houseVel.length() < introConfig.settleThreshold && houseAngVel.length() < 0.06) {
+    if (INTRO.phase === 'DROP') { setIntroPhase('SETTLING'); INTRO.settleTimer = 0; }
+  }
+}
+function introSettle(dt) {
+  INTRO.settleTimer += dt;
+  house.rotation.x += (0 - house.rotation.x) * 0.12;
+  house.rotation.z += (0 - house.rotation.z) * 0.12;
+  house.rotation.y += (0 - house.rotation.y) * 0.08;
+  if (INTRO.settleTimer > introConfig.settleTime) { setIntroPhase('MAILBOX_REVEAL'); INTRO.mailAnimStart = INTRO.t; }
+}
+function animMailbox() {
+  if (!mailboxPivot) return;
+  const t = THREE.MathUtils.clamp((INTRO.t - INTRO.mailAnimStart) / introConfig.mailboxAnimDur, 0, 1);
+  const e = easeOutBack(t);
+  mailboxPivot.scale.setScalar(Math.max(0.0001, e) * mailboxTargetScale * introConfig.mailboxScale);
+  mailboxPivot.rotation.y = THREE.MathUtils.lerp(introConfig.mailboxRotationStart, introConfig.mailboxRotationEnd, easeOutCubic(t));
+  if (t >= 1 && !INTRO.mailDone) { INTRO.mailDone = INTRO.t; }   // 邮箱完成：仅记录首次完成时刻，稍后（cameraHoldAfterLanding）再推镜
+}
+
+const loadingEl = document.getElementById('loading');
+const introCursor = document.getElementById('introCursor');
+const introHint = document.getElementById('introHint');
+loadingEl.classList.add('hide'); // 揭幕：露出画布上的 3D Intro（之后作为进入房间的白色幕布复用）
+const hintEl = document.getElementById('hint');
+if (hintEl) hintEl.style.display = 'none';   // 房间操作提示条仅在进入房间后出现
+
+function setIntroHint(text) { if (introHint) { introHint.textContent = text; introHint.classList.add('show'); } }
+function hideIntroHint() { if (introHint) introHint.classList.remove('show'); }
+
+function handleIntroMouse(e) {
+  if (INTRO.phase === 'READY' && houseHoverSphere) {
+    raycaster.setFromCamera(pointer, introCamera);
+    INTRO.houseHovered = !!raycaster.ray.intersectSphere(houseHoverSphere, _hv);
+  } else {
+    INTRO.houseHovered = false;
+  }
+  if (introCursor) {
+    if (INTRO.houseHovered) { introCursor.style.display = 'block'; introCursor.style.left = e.clientX + 'px'; introCursor.style.top = e.clientY + 'px'; }
+    else introCursor.style.display = 'none';
+  }
+}
+function startEntering() {
+  if (INTRO.phase !== 'READY') return;
+  setIntroPhase('ENTERING');
+  INTRO.enterStart = INTRO.t;
+  INTRO.curtainIn = false; INTRO.swapped = false;
+  hideIntroHint();
+  if (introCursor) introCursor.style.display = 'none';
+}
+
+function updateIntroShadows() {
+  // 阴影随高度：高则淡软，近地则收紧加深
+  if (house) {
+    const above = Math.max(0, house.position.y - houseRestY);
+    const f = THREE.MathUtils.clamp(above / Math.max(0.001, introConfig.houseStartHeight), 0, 1);
+    groundMat.opacity = THREE.MathUtils.lerp(introConfig.shadowOpacityNear, introConfig.shadowOpacityFar, f);
+  }
+}
+
+function updateIntro(dt) {
+  INTRO.t += dt;
+  // cameraDamping 仅用于 LOADING 阶段的轻微插值；其余阶段相机由各自逻辑直接设定。
+  const cc = 1 - Math.pow(introConfig.cameraDamping, dt);
+  let pos = introCameras.far, tgt = introCameras.farTgt;
+  switch (INTRO.phase) {
+    case 'LOADING':
+      pos = introCameras.far; tgt = introCameras.farTgt; break;
+    case 'DROP':
+      introPhysics(dt); pos = introCameras.far; tgt = introCameras.farTgt; break;
+    case 'SETTLING': {
+      introPhysics(dt); introSettle(dt);
+      pos = introCameras.far; tgt = introCameras.farTgt;
+      // 落地瞬间极轻微的“重量感”下沉（幅度极小、约 0.14s，不重新构图、不产生明显 jump）
+      const se = INTRO.t - INTRO.phaseStart;
+      if (se < 0.14) { const dip = Math.sin(se / 0.14 * Math.PI) * 0.015; pos = pos.clone(); pos.y -= dip; }
+      break;
+    }
+    case 'MAILBOX_REVEAL':
+      if (INTRO.mailReady) animMailbox();
+      // 邮箱完成后，再保持远景 cameraHoldAfterLanding 秒，避免落地后立即重新构图
+      if (INTRO.mailDone && INTRO.t - INTRO.mailDone >= introConfig.cameraHoldAfterLanding) setIntroPhase('CAMERA_DOLLY');
+      pos = introCameras.far; tgt = introCameras.farTgt; break;
+    case 'CAMERA_DOLLY': {
+      // 进入时记录真实起点（= 当前远景机位）与终点，构建空间路径。不依赖“无限 lerp 到预设”。
+      if (dolly.builtAt !== INTRO.phaseStart) {
+        dolly.startPos.copy(introCamera.position);
+        dolly.startTgt.copy(introCamCurTgt);
+        dolly.endPos.copy(introCameras.closeup);
+        dolly.endTgt.copy(introCameras.closeupTgt);
+        const toEnd = dolly.endPos.clone().sub(dolly.startPos);
+        const p0 = dolly.startPos.clone();
+        const p1 = dolly.startPos.clone().addScaledVector(toEnd, introConfig.cameraDollyForward * 0.4);
+        p1.y -= (dolly.startPos.y - dolly.endPos.y) * introConfig.cameraDollyDrop * 0.5;   // 前进中略降
+        const p2 = dolly.startPos.clone().addScaledVector(toEnd, 0.65);
+        p2.x += (dolly.endPos.x - dolly.startPos.x) * introConfig.cameraDollySide;         // 向房屋+邮箱横移
+        p2.y -= (dolly.startPos.y - dolly.endPos.y) * introConfig.cameraDollyDrop * 0.5;   // 继续略降
+        dolly.curve = new THREE.CatmullRomCurve3([p0, p1, p2, dolly.endPos.clone()]);
+        dolly.builtAt = INTRO.phaseStart;
+      }
+      const t = THREE.MathUtils.clamp((INTRO.t - INTRO.phaseStart) / introConfig.cameraDollyDuration, 0, 1);
+      const e = easeInOutCubic(t);                 // 前缓·中快·尾缓，无回弹
+      introCamera.position.copy(dolly.curve.getPoint(e));
+      introCamCurTgt.copy(dolly.startTgt).lerp(dolly.endTgt, e);  // 注视点稳定跟随 groundedFocusPoint
+      introCamera.lookAt(introCamCurTgt);
+      updateIntroShadows();
+      if (t >= 1) { setIntroPhase('WAITING'); setIntroHint('房间准备中…'); }
+      return;  // DOLLY 已直接设置相机，跳过底部通用 lerp
+    }
+    case 'WAITING':
+      pos = introCameras.closeup; tgt = introCameras.closeupTgt;
+      if (INTRO.roomReady) { setIntroPhase('READY'); setIntroHint('轻点小屋，推门而入 🏠'); }
+      break;
+    case 'READY':
+      pos = introCameras.closeup; tgt = introCameras.closeupTgt;
+      { const target = INTRO.houseHovered ? introConfig.houseHoverScale : 1;
+        house.scale.lerp(new THREE.Vector3(target, target, target), 0.18); }
+      break;
+    case 'ENTERING': {
+      const e = INTRO.t - INTRO.enterStart;
+      const kd = introConfig.knockDuration;
+      if (e < kd) { const f = 1 - e / kd; house.rotation.z = Math.sin(e / kd * Math.PI * 4) * 0.05 * f; house.position.x = Math.sin(e / kd * Math.PI * 6) * 0.03; }
+      else { house.rotation.z = 0; house.position.x = 0; }
+      pos = introCameras.closeup.clone();
+      const push = THREE.MathUtils.clamp((e - kd) / 0.4, 0, 1);
+      const hc = new THREE.Vector3(0, houseRestY + houseLocalCenter.y, 0);
+      pos.lerp(hc, push * 0.15);
+      tgt = introCameras.closeupTgt;
+      if (!INTRO.curtainIn && e > kd + 0.12) { INTRO.curtainIn = true; loadingEl.style.opacity = '1'; }
+      if (INTRO.curtainIn && !INTRO.swapped && e > kd + 0.78) {
+        INTRO.swapped = true;
+        loadingEl.style.opacity = '0';   // 揭幕：白色幕布淡出，露出已预加载的房间
+        camera.position.copy(HOME.base); camera.lookAt(HOME.target);
+        if (hintEl) hintEl.style.display = 'flex';   // 进入房间：显示操作提示条
+        setIntroPhase('ROOM');
+      }
+      break;
+    }
+  }
+  introCamera.position.lerp(pos, cc);
+  introCamCurTgt.lerp(tgt, cc);
+  introCamera.lookAt(introCamCurTgt);
+  updateIntroShadows();
+}
+
+const LAMP_INTENSITY = 13, SUN_INTENSITY = 120;
+const LAMP_COLOR = 0xffedcf;
+
+function setLamps(on) {
+  state.lampsOn = on;
+  lampLights.forEach(L => L.intensity = on ? LAMP_INTENSITY : 0);
+  lampLensMeshes.forEach(m => m.material.emissiveIntensity = on ? 1.6 : 0.04);
+  updateBase();
+}
+function setSun(on) {
+  state.sunOn = on;
+  sunShaft.intensity = on ? SUN_INTENSITY : 0;
+  if (coverMesh) coverMesh.visible = false;
+  if (glassMesh) {
+    glassMesh.material.transparent = true;
+    glassMesh.material.opacity = 0.15;
+    glassMesh.material.needsUpdate = true;
+  }
+  updateBase();
+}
+
+/* ================= 音乐：Web Audio 合成 lo-fi 循环 ================= */
+let AC = null, musicMaster = null, musicTimer = null, musicStep = 0;
+const CHORDS = [
+  [174.6, 220.0, 261.6, 329.6],  // Fmaj7
+  [146.8, 174.6, 220.0, 293.7],  // Dm7
+  [155.6, 196.0, 233.1, 293.7],  // Ebmaj7
+  [130.8, 164.8, 196.0, 246.9]   // Cm7
+];
+const MELODY = [0, 2, 1, 3, 2, 1, 3, 0, 1, 3, 0, 2, 3, 2, 0, 1];
+function playNote(freq, t, dur, type, vol) {
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(musicMaster);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+function toggleMusic() {
+  if (!AC) {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    musicMaster = AC.createGain(); musicMaster.gain.value = 0.5;
+    const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+    musicMaster.connect(lp); lp.connect(AC.destination);
+    /* 黑胶底噪 */
+    const len = 2 * AC.sampleRate;
+    const buf = AC.createBuffer(1, len, AC.sampleRate);
+    const d = buf.getChannelData(0); let last = 0;
+    for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + .02 * w) / 1.02; d[i] = last * 3; }
+    const src = AC.createBufferSource(); src.buffer = buf; src.loop = true;
+    const ng = AC.createGain(); ng.gain.value = 0.045;
+    src.connect(ng); ng.connect(musicMaster); src.start();
+  }
+  state.musicOn = !state.musicOn;
+  if (state.musicOn) {
+    AC.resume();
+    musicMaster.gain.setTargetAtTime(0.5, AC.currentTime, 0.15);
+    clearInterval(musicTimer);
+    musicTimer = setInterval(() => {
+      const t = AC.currentTime + 0.06;
+      const chord = CHORDS[Math.floor(musicStep / 8) % 4];
+      if (musicStep % 8 === 0) chord.forEach(f => playNote(f / 2, t, 3.4, 'sine', 0.10));
+      playNote(chord[MELODY[musicStep % 16]] * 2, t, 0.5, 'triangle', 0.07);
+      musicStep++;
+    }, 330);
+    toast('🎵 唱片机播放中 · 再点一次停止');
+  } else {
+    clearInterval(musicTimer);
+    musicMaster.gain.setTargetAtTime(0, AC.currentTime, 0.2);
+    toast('⏸ 音乐已停止');
+  }
+}
+let toastTimer = null;
+function toast(msg) {
+  const t = document.getElementById('musicToast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ================= 加载模型 ================= */
+/* ================= Room 独立加载管理器：真实进度 + 全部资产就绪才算 roomReady ================= */
+const roomLoadProgress = {};                 // url -> {loaded, total}
+let roomProgressShown = 0;                   // 已显示过的最大百分比（进度条只增不减）
+const roomLoadingManager = new THREE.LoadingManager();
+function onRoomProgress(url, xhr) {
+  if (!xhr) return;
+  roomLoadProgress[url] = { loaded: xhr.loaded || 0, total: xhr.total || 0 };
+  let L = 0, T = 0;
+  for (const k in roomLoadProgress) { L += roomLoadProgress[k].loaded; T += roomLoadProgress[k].total; }
+  setRoomProgress(T > 0 ? Math.round(L / T * 100) : 0);
+}
+function setRoomProgress(pct) {
+  pct = Math.max(0, Math.min(100, pct));
+  // 进度条只增不减：主 GLB 先完成、家具后续加入时会把分母抬高使原始比值回退，
+  // 这里取历史最大值，避免出现 97% → 37% 的倒退（仍完全由真实 xhr.loaded/total 驱动）。
+  if (pct < roomProgressShown) pct = roomProgressShown; else roomProgressShown = pct;
+  const wrap = document.getElementById('roomProgress');
+  const bar = document.getElementById('roomProgressBar');
+  const label = document.getElementById('roomProgressLabel');
+  if (wrap) wrap.style.height = introConfig.progressBarHeight + 'px';
+  if (bar) bar.style.width = pct + '%';
+  if (label) label.textContent = 'Loading room ' + pct + '%';
+}
+function fadeRoomProgress() {
+  const wrap = document.getElementById('roomProgress');
+  const bar = document.getElementById('roomProgressBar');
+  roomProgressShown = 100;
+  if (bar) bar.style.width = '100%';
+  if (wrap) setTimeout(() => wrap.classList.add('done'), 350);
+}
+roomLoadingManager.onLoad = () => {
+  // 所有 Room 资产（主 GLB + 家具）真正加载完成，才允许进入房间
+  INTRO.roomReady = true;
+  fadeRoomProgress();
+};
+roomLoadingManager.onError = (url) => { console.error('Room 资产加载失败:', url); };
+const roomLoader = new GLTFLoader(roomLoadingManager);
+roomLoader.load(
+  './sea_salt_room_clean.glb',
+  (gltf) => {
+    model = gltf.scene;
+    scene.add(model);
+    model.updateMatrixWorld(true);
+
+    const WALL_FLOOR_PREFIXES = ['LeftBoard','RightBoard','BackBoard','FloorPlank','Floor_Blockout',
+      'LeftWall_Blockout','Wall_Right','BackWall_Blockout','Window_Glass','Window_Opening'];
+
+    /* 苹果椅中心（打字机朝向用） */
+    const tmpBox = new THREE.Box3(), tmpC = new THREE.Vector3();
+    const isChairMesh = (o) => { let n = o; while (n) { if (/^AppleChair/.test(n.name || '')) return true; n = n.parent; } return false; };
+    const chairSum = new THREE.Vector3(); let chairN = 0;
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      const nm = o.name || '';
+      if (/_Lens$/.test(nm)) {
+        o.material = o.material.clone();
+        o.material.emissive = new THREE.Color(0xffe2b0);
+        o.material.emissiveIntensity = 1.6;
+        lampLensMeshes.push(o);
+      }
+      if (nm === 'Window_Glass') { o.material = o.material.clone(); glassMesh = o; }
+      if (nm === 'Window_Opening') { coverMesh = o; coverMesh.visible = false; }
+      if (WALL_FLOOR_PREFIXES.some(p => nm.startsWith(p))) {
+        const tint = (m) => { const c = m.clone(); c.color.set(0xbbdbfc); return c; };
+        o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material);
+      }
+      o.receiveShadow = true;
+      if (!WALL_FLOOR_PREFIXES.some(p => nm.startsWith(p))) o.castShadow = true;
+      if (isChairMesh(o)) { tmpBox.setFromObject(o); chairSum.add(tmpBox.getCenter(new THREE.Vector3())); chairN++; }
+    });
+    if (chairN) chairCenter = chairSum.divideScalar(chairN);
+
+    /* ===== 书本网格：世界坐标区域框选（凳子上书堆，实测 AABB x[2.83,3.37] y[1.13,1.75] z[1.91,2.25]）===== */
+    const BOOKS_REGION = { x: [2.7, 3.6], y: [1.12, 1.95], z: [1.75, 2.45] };
+    const bookMeshes = [];
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      const nm = o.name || '';
+      if (WALL_FLOOR_PREFIXES.some(p => nm.startsWith(p))) return;
+      tmpBox.setFromObject(o);
+      tmpBox.getSize(tmpC); if (tmpC.x > 1.4 || tmpC.y > 1.4 || tmpC.z > 1.4) return;
+      tmpBox.getCenter(tmpC);
+      if (tmpC.x > BOOKS_REGION.x[0] && tmpC.x < BOOKS_REGION.x[1] &&
+          tmpC.y > BOOKS_REGION.y[0] && tmpC.y < BOOKS_REGION.y[1] &&
+          tmpC.z > BOOKS_REGION.z[0] && tmpC.z < BOOKS_REGION.z[1]) bookMeshes.push(o);
+    });
+    if (bookMeshes.length) {
+      const c = new THREE.Vector3();
+      bookMeshes.forEach(m => { tmpBox.setFromObject(m); c.add(tmpBox.getCenter(new THREE.Vector3())); });
+      c.divideScalar(bookMeshes.length);
+      booksGroup = new THREE.Group();
+      booksGroup.position.copy(c);
+      booksGroup.userData.kind = 'books';
+      scene.add(booksGroup);
+      bookMeshes.forEach(m => booksGroup.attach(m));
+    }
+
+    /* 房间灯：3 个暖白点光源 + 投影 */
+    const lampSpecs = [
+      [-4.1, 5.15,  0.00],
+      [ 4.1, 5.15,  0.00],
+      [ 3.8, 5.15, -2.20],
+    ];
+    lampLights = lampSpecs.map(p => {
+      const L = new THREE.PointLight(LAMP_COLOR, LAMP_INTENSITY, 14, 1.5);
+      L.position.set(...p);
+      L.castShadow = true;
+      L.shadow.mapSize.set(1024, 1024);
+      L.shadow.camera.near = 0.5;
+      L.shadow.camera.far = 16;
+      L.shadow.bias = -0.0006;
+      L.shadow.normalBias = 0.03;
+      scene.add(L);
+      return L;
+    });
+
+    /* 窗外阳光 */
+    sunShaft = new THREE.SpotLight(0xffcc88, 0, 0, 0.38, 0.85, 1.1);
+    sunShaft.position.set(11, 4.3, -0.95);
+    sunShaft.target.position.set(0.5, 0.5, -0.95);
+    sunShaft.castShadow = true;
+    sunShaft.shadow.mapSize.set(2048, 2048);
+    sunShaft.shadow.camera.near = 1;
+    sunShaft.shadow.camera.far = 30;
+    sunShaft.shadow.bias = -0.0006;
+    sunShaft.shadow.normalBias = 0.02;
+    scene.add(sunShaft.target);
+    scene.add(sunShaft);
+
+    setLamps(true);
+    setSun(true);
+
+    /* ================= 桌面物品 ================= */
+    const DESK_Y = 1.16;
+
+    function placeOnDesk(gltfModel, offsetX, offsetZ, rotY = 0, yLift = 0, rotZ = 0) {
+      const box = new THREE.Box3().setFromObject(gltfModel);
+      const bottomY = box.min.y;
+      gltfModel.position.set(offsetX, DESK_Y - bottomY + yLift, offsetZ);
+      gltfModel.rotation.y = rotY;
+      gltfModel.rotation.z = rotZ;
+      gltfModel.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      scene.add(gltfModel);
+      return gltfModel;
+    }
+
+    /* 可交互物品注册：包围球 + 悬停发光/放大（interactables 为模块级数组） */
+    function registerItem(kind, group) {
+      group.userData.kind = kind;
+      scene.updateMatrixWorld(true);
+      const sphere = new THREE.Box3().setFromObject(group).getBoundingSphere(new THREE.Sphere());
+      sphere.radius += 0.06;
+      group.userData.baseScale = 1;
+      interactables.push({ kind, group, sphere });
+      refreshHook();
+      return group;
+    }
+
+    /* ① 电脑 — 左侧桌面 */
+    roomLoader.load('./laptop_20260908.glb', (g) => {
+      const grp = placeOnDesk(g.scene, -0.3, -2.8, 0.05, 0.38);
+      registerItem('laptop', grp);
+      scene.updateMatrixWorld(true);
+      const c = new THREE.Box3().setFromObject(grp).getCenter(new THREE.Vector3());
+      LAPCAM.pos = new THREE.Vector3(c.x, c.y + 0.5, c.z + 1.7);
+      LAPCAM.tgt = c.clone();
+      refreshHook();
+    }, (xhr) => onRoomProgress('./laptop_20260908.glb', xhr), (err) => console.warn('电脑加载失败:', err.message));
+
+    /* ② 唱片机 — 右侧桌面，绕Y轴旋转 */
+    roomLoader.load('./record_player_20260908.glb', (g) => {
+      const grp = registerItem('record', placeOnDesk(g.scene, 2.5, -1.6, -0.55, 0.38, 0));
+      scene.updateMatrixWorld(true);
+      const c = new THREE.Box3().setFromObject(grp).getCenter(new THREE.Vector3());
+      RECCAM.pos = new THREE.Vector3(c.x, c.y + 0.5, c.z + 1.7);
+      RECCAM.tgt = c.clone();
+      refreshHook();
+    }, (xhr) => onRoomProgress('./record_player_20260908.glb', xhr), (err) => console.warn('唱片机加载失败:', err.message));
+
+    /* ③ 打字机 — 电脑左侧，朝向苹果椅（可悬停/点击） */
+    roomLoader.load('./typewriter_20260908.glb', (g) => {
+      const TX = -2.15, TZ = -1.85;
+      const rotY = chairCenter ? Math.atan2(chairCenter.x - TX, chairCenter.z - TZ) : 0.45;
+      const grp = registerItem('typewriter', placeOnDesk(g.scene, TX, TZ, rotY, 0.38));
+      scene.updateMatrixWorld(true);
+      const c = new THREE.Box3().setFromObject(grp).getCenter(new THREE.Vector3());
+      TYCAM.pos = new THREE.Vector3(c.x, c.y + 0.45, c.z + 1.6);
+      TYCAM.tgt = c.clone();
+      refreshHook();
+    }, (xhr) => onRoomProgress('./typewriter_20260908.glb', xhr), (err) => console.warn('打字机加载失败:', err.message));
+
+    /* ④ 书本分组注册 + 特写机位 */
+    if (booksGroup) {
+      registerItem('books', booksGroup);
+      scene.updateMatrixWorld(true);
+      const bc = new THREE.Box3().setFromObject(booksGroup).getCenter(new THREE.Vector3());
+      BOOKCAM.pos = new THREE.Vector3(bc.x, bc.y + 0.35, bc.z + 1.6);
+      BOOKCAM.tgt = bc.clone();
+      refreshHook();
+    }
+
+    /* 调试/自动化测试钩子 */
+    function refreshHook() {
+      window.__room = Object.assign(window.__room || {}, {
+        state, camera, setLamps, setSun,
+        model, interactables, LAPCAM,
+        hover: (kind) => setHover(interactables.find(i => i.kind === kind) || null),
+        openItem: (kind) => enterItem(kind),
+        goHome: () => goHome(),
+        toggleMusic,
+        cover: () => coverMesh, glass: () => glassMesh,
+        classifyAt: (nx, ny) => {
+          raycaster.setFromCamera(new THREE.Vector2(nx, ny), camera);
+          const hits = raycaster.intersectObject(model, true);
+          return hits.slice(0, 3).map(h => ({ name: h.object.name, dist: +h.distance.toFixed(2), kind: classifyHit(h) }));
+        },
+        project: (v) => { const p = new THREE.Vector3(...v).project(camera); return [(p.x+1)/2*innerWidth, (1-p.y)/2*innerHeight]; }
+      });
+    }
+    refreshHook();
+
+    camera.position.copy(HOME.base);
+    camera.lookAt(HOME.target);
+    /* roomReady 改由 roomLoadingManager.onLoad 在所有 Room 资产真正加载完成后统一设置，避免主 GLB 单独完成就误判 Ready */
+  },
+  (xhr) => onRoomProgress('./sea_salt_room_clean.glb', xhr),
+  (err) => { console.error('房间加载失败:', err.message); setIntroHint('房间加载失败，请刷新重试'); }
+);
+
+/* ================= 命中分类 ================= */
+function ancestorName(obj, re) {
+  let n = obj;
+  while (n) { if (re.test(n.name || '')) return true; n = n.parent; }
+  return false;
+}
+const WINDOW_WORLD = new THREE.Vector3(5.84, 2.68, -0.95);
+const WINDOW_CLICK_RADIUS = 90;
+function windowScreenPos() {
+  const p = WINDOW_WORLD.clone().project(camera);
+  if (p.z > 1) return null;
+  return [ (p.x + 1) / 2 * window.innerWidth, (1 - p.y) / 2 * window.innerHeight ];
+}
+function nearWindowOnScreen(mx, my) {
+  const s = windowScreenPos();
+  if (!s) return false;
+  return Math.hypot(mx - s[0], my - s[1]) < WINDOW_CLICK_RADIUS;
+}
+function classifyHit(hit) {
+  const o = hit.object;
+  if (ancestorName(o, /^Lamp_/)) return 'lamp';
+  if (ancestorName(o, /^Window/)) return 'window';
+  return null;
+}
+
+/* ================= 悬停发光 + 放大 ================= */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let mouseNX = 0, mouseNY = 0;
+let hovered = null;
+const _hv = new THREE.Vector3();
+
+function updatePointer(e) {
+  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  mouseNX = pointer.x; mouseNY = pointer.y;
+}
+/* 光线-包围球求交，取最近者（比逐网格射线快得多） */
+function pickItem() {
+  raycaster.setFromCamera(pointer, camera);
+  let best = null, bestD = Infinity;
+  for (const it of interactables) {
+    const p = raycaster.ray.intersectSphere(it.sphere, _hv);
+    if (p) {
+      const d = p.distanceTo(camera.position);
+      if (d < bestD) { bestD = d; best = it; }
+    }
+  }
+  return best;
+}
+function setHover(it) {
+  if (hovered === it) return;
+  if (hovered) hovered.group.scale.setScalar(hovered.group.userData.baseScale || 1);
+  hovered = it;
+  if (it) {
+    it.group.scale.setScalar(1.05);
+    outlinePass.selectedObjects = [it.group];
+  } else {
+    outlinePass.selectedObjects = [];
+  }
+}
+
+/* 模式切换：laptop / books / record / typewriter 统一走 enterItem（镜头拉近 → 弹层） */
+const tag = document.getElementById('mode-tag');
+const MODE_LABELS = { laptop: '💻 电脑', books: '📚 书本', record: '🎧 唱片机', typewriter: '⌨️ 打字机' };
+function enterItem(kind) {
+  const cam = ITEM_CAMS[kind];
+  if (cam && !cam.pos) return;
+  state.mode = kind;
+  setHover(null);
+  const ov = document.getElementById(kind === 'typewriter' ? 'typeOverlay' : kind + 'Overlay');
+  setTimeout(() => { if (state.mode === kind && ov) ov.classList.add('show'); }, 300);
+  tag.textContent = MODE_LABELS[kind] + ' — 右键/Esc 返回全景';
+  tag.classList.add('show');
+}
+function goHome() {
+  state.mode = 'home';
+  ['laptopOverlay', 'booksOverlay', 'recordOverlay', 'typeOverlay']
+    .forEach(id => document.getElementById(id).classList.remove('show'));
+  tag.classList.remove('show');
+}
+
+/* ================= 交互事件 ================= */
+function cameraSettled() {
+  return camera.position.distanceTo(desiredPos) < 0.08;
+}
+
+window.addEventListener('mousemove', (e) => {
+  updatePointer(e);
+  if (INTRO.phase !== 'ROOM') { handleIntroMouse(e); return; }   // Intro 阶段：仅做房屋悬停检测
+  if (!model) { renderer.domElement.style.cursor = 'default'; return; }   // 模型未就绪时不做拾取
+  if (state.mode !== 'home') { setHover(null); renderer.domElement.style.cursor = 'default'; return; }
+  const it = pickItem();
+  setHover(it);
+  const clickable = !!it
+    || nearWindowOnScreen(e.clientX, e.clientY)
+    || (() => { raycaster.setFromCamera(pointer, camera); return raycaster.intersectObject(model, true).slice(0, 3).some(h => { const k = classifyHit(h); return k === 'lamp' || k === 'window'; }); })();
+  renderer.domElement.style.cursor = clickable ? 'pointer' : 'default';
+});
+
+/* 边缘缓动：中间死区不动，靠近边缘才产生视角跟随（smoothstep 平滑加速） */
+const EDGE_ZONE = 0.22;
+function edgePan(v) {
+  const a = Math.abs(v);
+  if (a <= EDGE_ZONE) return 0;
+  const t = (a - EDGE_ZONE) / (1 - EDGE_ZONE);
+  return Math.sign(v) * t * t * (3 - 2 * t);
+}
+/* 鼠标离开窗口 → 视角回正 */
+document.addEventListener('mouseout', (e) => { if (!e.relatedTarget) { mouseNX = 0; mouseNY = 0; } });
+
+window.addEventListener('click', (e) => {
+  if (INTRO.phase !== 'ROOM') { if (INTRO.phase === 'READY') startEntering(); return; }  // Intro：READY 点击进入
+  if (!model) return;
+  updatePointer(e);
+  if (state.mode !== 'home') return;   // 覆盖层自身的点击由 DOM 处理
+  const it = pickItem();
+  if (it) {
+    enterItem(it.kind);   // laptop/books/record/typewriter 统一：镜头拉近 + 毛玻璃弹层
+    return;
+  }
+  if (!cameraSettled()) return;
+  if (nearWindowOnScreen(e.clientX, e.clientY)) { setSun(!state.sunOn); return; }
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObject(model, true);
+  if (!hits.length) return;
+  const kind = hits.slice(0, 3).map(h => classifyHit(h)).find(k => k) || classifyHit(hits[0]);
+  if (kind === 'lamp') setLamps(!state.lampsOn);
+  else if (kind === 'window') setSun(!state.sunOn);
+});
+
+window.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (state.mode !== 'home') goHome();
+});
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && state.mode !== 'home') goHome();
+});
+document.getElementById('npClose').addEventListener('click', goHome);
+document.getElementById('laptopOverlay').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('laptopOverlay')) goHome();
+});
+['booksOverlay', 'recordOverlay', 'typeOverlay'].forEach(id => {
+  document.getElementById(id).addEventListener('click', goHome);
+});
+
+/* ================= 动画循环 ================= */
+const desiredPos = HOME.base.clone();
+const desiredTgt = HOME.target.clone();
+const curTarget = HOME.target.clone();
+const clock = new THREE.Clock();
+
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  /* Intro 阶段：渲染独立白底场景；进入 ROOM 后落到下面的房间分支 */
+  if (INTRO.phase !== 'ROOM') {
+    updateIntro(dt);
+    if (INTRO.phase !== 'ROOM') { renderer.render(introScene, introCamera); return; }
+  }
+
+  const k = 1 - Math.pow(0.0015, dt);
+
+  if (state.mode === 'home') {
+    const ex = edgePan(mouseNX), ey = edgePan(mouseNY);
+    const px = THREE.MathUtils.clamp(ex * ORBIT.x, -ORBIT.x, ORBIT.x);
+    const py = THREE.MathUtils.clamp(HOME.base.y + ey * 1.3, ORBIT.yMin, ORBIT.yMax);
+    const pz = THREE.MathUtils.clamp(HOME.base.z - Math.abs(ex) * 0.9, ORBIT.zMin, ORBIT.zMax);
+    desiredPos.set(px, py, pz);
+    desiredTgt.set(THREE.MathUtils.clamp(ex * ORBIT.tgtX, -ORBIT.tgtX, ORBIT.tgtX), HOME.target.y, 0);
+  } else if (ITEM_CAMS[state.mode] && ITEM_CAMS[state.mode].pos) {
+    desiredPos.copy(ITEM_CAMS[state.mode].pos);
+    desiredTgt.copy(ITEM_CAMS[state.mode].tgt);
+  }
+  /* 各特写模式镜头 lerp 到对应机位后停住 */
+
+  camera.position.lerp(desiredPos, k);
+  curTarget.lerp(desiredTgt, k);
+  camera.lookAt(curTarget);
+  /* 相机每帧都在动，悬停拾取必须逐帧刷新，否则状态过期（书本滑出光标下仍显示发光） */
+  if (state.mode === 'home' && model) {
+    camera.updateMatrixWorld();
+    setHover(pickItem());
+    renderer.domElement.style.cursor = (hovered
+      || nearWindowOnScreen((mouseNX + 1) / 2 * window.innerWidth, (1 - mouseNY) / 2 * window.innerHeight)) ? 'pointer' : 'default';
+  }
+  composer.render();
+}
+tick();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  introCamera.aspect = window.innerWidth / window.innerHeight;
+  introCamera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
