@@ -139,14 +139,95 @@
     background: rgba(240,247,255,.10);
     backdrop-filter: blur(18px) saturate(1.1);
   }
-  /* ===== 物品浮层：毛玻璃背景 + SVG 矢量重构主体（书本/唱片机/打字机，与电脑记事本同路径） ===== */
-  #booksOverlay svg, #recordOverlay svg, #typeOverlay svg {
+  /* ===== 物品浮层：毛玻璃背景 + SVG 矢量重构主体（唱片机/打字机，与电脑记事本同路径） ===== */
+  #recordOverlay svg, #typeOverlay svg {
     width: min(420px, 58vw); height: auto;
     transform: scale(.78);
     transition: transform .5s cubic-bezier(.2,1.5,.4,1);
     filter: drop-shadow(0 24px 50px rgba(40,70,110,.35));
   }
-  #booksOverlay.show svg, #recordOverlay.show svg, #typeOverlay.show svg { transform: scale(1); }
+  #recordOverlay.show svg, #typeOverlay.show svg { transform: scale(1); }
+  /* ===== 书本浮层：FolderScene（folder-back / folder-icons / folder-front 三层独立 DOM） ===== */
+  #booksOverlay .folder-scene {
+    position: relative; width: min(410px, 55vw); aspect-ratio: 340 / 300;
+    transform: scale(.78);
+    transition: transform .5s cubic-bezier(.2,1.5,.4,1);
+    filter: drop-shadow(0 24px 50px rgba(40,70,110,.35));
+  }
+  #booksOverlay.show .folder-scene { transform: scale(1); }
+  /* 三层统一以 folder-scene 为坐标系，绝对定位铺满 */
+  .folder-back, .folder-icons, .folder-front {
+    position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  }
+  .folder-back { z-index: 1; pointer-events: none; }
+  .folder-back svg { width: 100%; height: 100%; display: block; }
+  .folder-icons { z-index: 2; pointer-events: none; }
+  .folder-scene.open .folder-icons { pointer-events: auto; }
+  /* FolderFront：浅海盐蓝半透明亚克力前片（第 3 层，永远压住图标层） */
+  .folder-front {
+    z-index: 3; cursor: pointer;
+    left: 5.29%; top: 25.33%; width: 89.41%; height: 68.67%;
+    background: rgba(175, 215, 245, 0.58);
+    -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.45);
+    border-radius: 24px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.55), 0 12px 30px rgba(55,90,120,0.12);
+    overflow: hidden;
+  }
+  .folder-front::before { /* 半透明竖条纹 */
+    content: ""; position: absolute; inset: 0;
+    background: repeating-linear-gradient(90deg,
+      rgba(220,235,248,0) 0, rgba(220,235,248,0) 20px,
+      rgba(220,235,248,0.42) 20px, rgba(220,235,248,0.42) 40px);
+    opacity: .42;
+  }
+  .folder-front::after { /* 顶部边缘高光 */
+    content: ""; position: absolute; left: 0; top: 0; width: 100%; height: 14px;
+    background: linear-gradient(rgba(255,255,255,0.55), rgba(255,255,255,0));
+  }
+  /* 项目图标层（第 2 层）：收起 = 轻微扇形插在文件夹里（下半被亚克力前片覆盖）；展开 = 上移+散开 */
+  .folder-icon {
+    position: absolute;
+    left: calc(50% + var(--x, 0%));
+    top: var(--t, 8%);
+    height: var(--h, 26%); width: calc(var(--h, 26%) * var(--kw, .78));
+    z-index: var(--z, 2);
+    transform: translate(-50%, -50%) rotate(var(--rest-rot, 0deg));
+    transform-origin: 50% 96%;
+    transition: transform .7s cubic-bezier(.2,.9,.25,1), margin-left .7s cubic-bezier(.2,.9,.25,1);
+    appearance: none; font: inherit; padding: 0; border: none; background: transparent;
+    cursor: pointer; pointer-events: none;
+  }
+  .folder-icon svg {
+    display: block; height: 100%; width: auto;
+    pointer-events: none;
+    filter: drop-shadow(0 8px 10px rgba(60,80,100,0.16)); /* 轻阴影跟随轮廓 */
+  }
+  /* 单图标参数：--x 横向站位（% of 舞台宽）/ --t 视觉中心高度（% of 舞台高）/ --h 高度（% of 舞台高）/ --rot 展开角 / --rest-rot 收起角 / --z 图标层内叠放 */
+  .icon-book       { --x: -28.0%;  --t: 22.5%;  --h: 41.0%; --kw: .58; --rot: -14deg; --rest-rot: -14deg; --z: 2; --ox: -12%; }
+  .icon-calculator { --x: -15.0%;  --t: 20.9%;  --h: 37.0%; --rot: -6deg;  --rest-rot: -6deg;  --z: 3; --ox: -6%; }
+  .icon-camera     { --x: 0%;      --t: 23.1%;  --h: 45.0%; --rot: 0deg;   --rest-rot: 0deg;   --z: 5; --ox: 0%; }
+  .icon-phonebook  { --x: 15.0%;   --t: 22.5%;  --h: 41.0%; --rot: 7deg;   --rest-rot: 7deg;   --z: 4; --ox: 6%; }
+  .icon-spatula    { --x: 26.0%;   --t: 23.0%;  --h: 44.0%; --rot: 12deg;  --rest-rot: 12deg;  --z: 2; --ox: 12%; }
+  .folder-scene.open .folder-icon {
+    pointer-events: auto;
+    margin-left: var(--ox, 0%);
+    transform: translate(-50%, -50%) translateY(-58%) rotate(var(--rot, 0deg));
+    transition-delay: calc(var(--i, 0) * 50ms);
+  }
+  /* 展开态：左压右的牌扇顺序 + 收窄可点区，保证每个图标的中心点都能命中自己 */
+  .folder-scene.open .icon-book       { z-index: 6; }
+  .folder-scene.open .icon-calculator { z-index: 5; }
+  .folder-scene.open .icon-camera     { z-index: 4; }
+  .folder-scene.open .icon-phonebook  { z-index: 3; }
+  .folder-scene.open .icon-spatula    { z-index: 2; }
+  .folder-scene.open .folder-icon:hover {
+    z-index: 30;
+    transform: translate(-50%, -50%) translateY(calc(-58% - 14px)) rotate(var(--rot, 0deg)) scale(1.06);
+  }
+  .folder-scene.open .folder-icon:hover svg {
+    filter: drop-shadow(0 16px 30px rgba(40,70,110,.32));
+  }
   /* 打字机：大图展示，底边与页面底边重合 */
   #typeOverlay { align-items: flex-end; }
   #typeOverlay svg { height: min(112vh, 220vw); width: auto; margin-bottom: -5vh; }
@@ -199,30 +280,175 @@
   </div>
 </div>
 
-<!-- 书本：毛玻璃 + SVG 重构文件夹 -->
+<!-- 书本：毛玻璃 + FolderScene（背板 / 项目卡片 / 前面板，卡片扇形展开） -->
 <div id="booksOverlay" data-page-node-id="NGeg9Ly6LF3moJbcUkamPH">
-  <svg viewBox="0 0 340 300" xmlns="http://www.w3.org/2000/svg" aria-label="文件夹">
-    <defs>
-      <clipPath id="fdClip"><rect x="18" y="76" width="304" height="206" rx="24"/></clipPath>
-      <linearGradient id="fdBack" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#b6d5ef"/><stop offset="1" stop-color="#a3c8e8"/>
-      </linearGradient>
-    </defs>
-    <!-- 背板 + 标签耳 -->
-    <path d="M18 62 q0 -18 18 -18 h84 q15 0 22 13 l9 19 h173 q16 0 16 16 v184 q0 18 -18 18 H36 q-18 0 -18 -18 Z" fill="url(#fdBack)"/>
-    <!-- 前面板：竖条纹 -->
-    <g clip-path="url(#fdClip)">
-      <rect x="18" y="76" width="304" height="206" fill="#c9e0f4"/>
-      <g fill="#dcEBf8">
-        <rect x="36" y="76" width="24" height="206"/><rect x="80" y="76" width="24" height="206"/>
-        <rect x="124" y="76" width="24" height="206"/><rect x="168" y="76" width="24" height="206"/>
-        <rect x="212" y="76" width="24" height="206"/><rect x="256" y="76" width="24" height="206"/>
-        <rect x="300" y="76" width="24" height="206"/>
-      </g>
-      <!-- 顶部内阴影 -->
-      <rect x="18" y="76" width="304" height="14" fill="#9fc4e2" opacity=".55"/>
-    </g>
-  </svg>
+  <div class="folder-scene" id="folderScene">
+    <!-- FolderBack：最底层背板 + 标签耳 -->
+    <svg class="folder-back" viewBox="0 0 340 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="fdBack" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#b6d5ef"/><stop offset="1" stop-color="#a3c8e8"/>
+        </linearGradient>
+      </defs>
+      <path d="M18 62 q0 -18 18 -18 h84 q15 0 22 13 l9 19 h173 q16 0 16 16 v184 q0 18 -18 18 H36 q-18 0 -18 -18 Z" fill="url(#fdBack)"/>
+    </svg>
+    <!-- 图标层（第 2 层）：收起时轻微扇形插在文件夹里，下半被亚克力前片覆盖 -->
+    <div class="folder-icons">
+      <button class="project-card folder-icon icon-book" data-project="project-1" style="--i:0">
+        <!-- 蓝色书本（重绘自参考图：蓝封皮+黄书脊带+奶油贴片+白花绿叶） -->
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="project-1">
+          <defs>
+            <linearGradient id="g1cv" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#9ec4ec"/><stop offset="1" stop-color="#7fabe0"/>
+            </linearGradient>
+          </defs>
+          <g transform="rotate(-6 50 50)">
+            <rect x="30" y="82" width="52" height="9" rx="4.5" fill="#f4ead2"/>
+            <rect x="30" y="82" width="52" height="9" rx="4.5" fill="none" stroke="#e3d5b4" stroke-width="1"/>
+            <rect x="20" y="12" width="62" height="74" rx="10" fill="url(#g1cv)"/>
+            <rect x="20" y="12" width="12" height="74" rx="6" fill="#7ba3d9"/>
+            <rect x="24" y="20" width="5" height="16" rx="2.5" fill="#f2c94c"/>
+            <rect x="24" y="62" width="5" height="16" rx="2.5" fill="#f2c94c"/>
+            <rect x="34" y="21" width="42" height="56" rx="8" fill="#faf3de"/>
+            <g fill="#fbfaf4" stroke="#eee5d2" stroke-width="1">
+              <circle cx="55" cy="36" r="7"/><circle cx="48" cy="42" r="7"/><circle cx="62" cy="42" r="7"/>
+              <circle cx="52" cy="49" r="7"/><circle cx="58" cy="49" r="7"/>
+            </g>
+            <circle cx="55" cy="43" r="5.5" fill="#e8766a"/>
+            <ellipse cx="46" cy="62" rx="8" ry="4.5" transform="rotate(-24 46 62)" fill="#8fbf7f"/>
+            <ellipse cx="63" cy="62" rx="8" ry="4.5" transform="rotate(24 63 62)" fill="#8fbf7f"/>
+          </g>
+        </svg>
+      </button>
+      <button class="project-card folder-icon icon-calculator" data-project="project-2" style="--i:1">
+        <!-- 计算器（重绘自参考图：奶油机身+蓝屏+彩色按键） -->
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="project-2">
+          <defs>
+            <linearGradient id="g2bd" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#f7efdc"/><stop offset="1" stop-color="#ecdfc2"/>
+            </linearGradient>
+          </defs>
+          <rect x="24" y="8" width="52" height="84" rx="12" fill="url(#g2bd)" stroke="#dccfab" stroke-width="1.5"/>
+          <rect x="29" y="13" width="42" height="17" rx="7" fill="#8db9e8"/>
+          <rect x="33" y="16" width="34" height="11" rx="4" fill="#a8c3a0"/>
+          <g stroke="#4a6b52" stroke-width="2.4" stroke-linecap="round" fill="none">
+            <path d="M36 38 h8 M40 34 v8"/>
+            <path d="M47 38 h7"/>
+            <path d="M57 35 l6 6 M63 35 l-6 6"/>
+          </g>
+          <circle cx="72" cy="38" r="2" fill="#4a6b52"/><circle cx="69" cy="34" r="1.8" fill="#4a6b52"/><circle cx="75" cy="34" r="1.8" fill="#4a6b52"/>
+          <g font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">
+            <g fill="#f6f1e2" stroke="#e0d5b8" stroke-width="1">
+              <rect x="30" y="46" width="11" height="9" rx="3"/><rect x="44" y="46" width="11" height="9" rx="3"/><rect x="58" y="46" width="11" height="9" rx="3"/>
+              <rect x="30" y="58" width="11" height="9" rx="3"/><rect x="44" y="58" width="11" height="9" rx="3"/><rect x="58" y="58" width="11" height="9" rx="3"/>
+            </g>
+            <text x="35.5" y="53.5" fill="#4a6b52">7</text><text x="49.5" y="53.5" fill="#4a6b52">8</text><text x="63.5" y="53.5" fill="#4a6b52">9</text>
+            <text x="35.5" y="65.5" fill="#3f6fa8">4</text><text x="49.5" y="65.5" fill="#3f6fa8">5</text><text x="63.5" y="65.5" fill="#3f6fa8">6</text>
+            <g fill="#f2cf6b" stroke="#ddb957" stroke-width="1">
+              <rect x="30" y="70" width="11" height="9" rx="3"/><rect x="44" y="70" width="11" height="9" rx="3"/><rect x="58" y="70" width="11" height="9" rx="3"/>
+            </g>
+            <text x="35.5" y="77.5" fill="#6b5a24">1</text><text x="49.5" y="77.5" fill="#6b5a24">2</text><text x="63.5" y="77.5" fill="#6b5a24">3</text>
+            <rect x="30" y="82" width="25" height="7" rx="3.5" fill="#8db9e8"/>
+            <text x="42.5" y="88" fill="#2e5685" font-size="7">0</text>
+          </g>
+          <g>
+            <rect x="71.5" y="46" width="9" height="9" rx="3" fill="#e8766a"/>
+            <rect x="71.5" y="58" width="9" height="31" rx="4" fill="#8fc98a"/>
+            <path d="M73.5 70 h5 M73.5 75 h5" stroke="#f6f1e2" stroke-width="2.2" stroke-linecap="round"/>
+          </g>
+        </svg>
+      </button>
+      <button class="project-card folder-icon icon-camera" data-project="project-3" style="--i:2">
+        <!-- 玩具相机（重绘自参考图：奶油+蓝机身+绿镜头圈+黑镜头） -->
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="project-3">
+          <defs>
+            <linearGradient id="g3bd" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#f7efdc"/><stop offset="1" stop-color="#ebdec1"/>
+            </linearGradient>
+            <radialGradient id="g3ln" cx="0.38" cy="0.35" r="0.9">
+              <stop offset="0" stop-color="#5a5a58"/><stop offset="0.75" stop-color="#2e2e2c"/><stop offset="1" stop-color="#1d1d1b"/>
+            </radialGradient>
+          </defs>
+          <path d="M34 30 L40 16 Q41 13 45 13 h10 Q59 13 60 16 L66 30 Z" fill="#f3ead4"/>
+          <circle cx="32" cy="24" r="7" fill="#8fc98a"/><rect x="28.5" y="22" width="7" height="3.5" rx="1.75" fill="#7ab873"/>
+          <circle cx="68" cy="24" r="7" fill="#ef9078"/><rect x="64" y="20.5" width="8" height="2.4" rx="1.2" fill="#f7b09b"/><rect x="64" y="24.5" width="8" height="2.4" rx="1.2" fill="#f7b09b"/>
+          <rect x="42" y="18" width="16" height="8" rx="3" fill="#8db9e8"/>
+          <rect x="12" y="28" width="76" height="52" rx="12" fill="url(#g3bd)" stroke="#dccfab" stroke-width="1.5"/>
+          <path d="M12 44 h76 v22 a12 12 0 0 1 -12 12 h-52 a12 12 0 0 1 -12 -12 Z" fill="#9cc3ec"/>
+          <rect x="70" y="38" width="14" height="10" rx="3" fill="#f2cf6b" stroke="#ddb957" stroke-width="1"/>
+          <circle cx="24" cy="42" r="5" fill="#ef9078"/><circle cx="24" cy="42" r="5" fill="none" stroke="#f6f1e2" stroke-width="2"/>
+          <circle cx="50" cy="54" r="21" fill="#f3ead4"/>
+          <circle cx="50" cy="54" r="16" fill="#8fc98a"/>
+          <circle cx="50" cy="54" r="12.5" fill="#7ab873"/>
+          <circle cx="50" cy="54" r="10" fill="url(#g3ln)"/>
+          <circle cx="46.5" cy="50" r="3" fill="#e8e8e6" opacity=".9"/>
+          <circle cx="53.5" cy="57.5" r="1.4" fill="#c9c9c7" opacity=".85"/>
+          <rect x="20" y="84" width="10" height="5" rx="2.5" fill="#f2cf6b"/>
+          <rect x="70" y="84" width="10" height="5" rx="2.5" fill="#f2cf6b"/>
+        </svg>
+      </button>
+      <button class="project-card folder-icon icon-phonebook" data-project="project-4" style="--i:3">
+        <!-- 螺旋电话本（重绘自参考图：蓝螺旋圈+奶油封面+蓝电话+右侧彩色标签） -->
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="project-4">
+          <defs>
+            <linearGradient id="g4bd" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#f9f2e0"/><stop offset="1" stop-color="#eee0c4"/>
+            </linearGradient>
+          </defs>
+          <g transform="rotate(4 50 50)">
+            <rect x="28" y="12" width="56" height="76" rx="10" fill="#8fc98a"/>
+            <rect x="32" y="14" width="50" height="10" rx="4" fill="#e8766a"/>
+            <rect x="24" y="10" width="54" height="78" rx="10" fill="url(#g4bd)" stroke="#dccfab" stroke-width="1.5"/>
+            <rect x="80" y="16" width="9" height="11" rx="3" fill="#8db9e8"/>
+            <rect x="80" y="30" width="9" height="11" rx="3" fill="#8fc98a"/>
+            <rect x="80" y="44" width="9" height="11" rx="3" fill="#f2cf6b"/>
+            <rect x="80" y="58" width="9" height="11" rx="3" fill="#ef8b7e"/>
+            <path d="M40 34 Q34 28 38 24 Q42 21 45 26 L49 33 Q51 37 47 39 Q50 47 56 51 Q59 47 63 49 L70 53 Q75 56 72 60 Q68 64 62 58 Q50 50 46 40 Q42 37 40 34 Z" fill="#8db9e8"/>
+            <rect x="59" y="27" width="4" height="9" rx="2" fill="#ef8b7e" transform="rotate(18 61 31.5)"/>
+            <rect x="65" y="32" width="4" height="9" rx="2" fill="#f2cf6b" transform="rotate(48 67 36.5)"/>
+            <rect x="66" y="43" width="4" height="9" rx="2" fill="#8fc98a" transform="rotate(90 68 47.5)"/>
+            <g fill="none" stroke="#7ba8dd" stroke-width="5" stroke-linecap="round">
+              <path d="M28 24 q-10 -3 -10 3 t10 4"/>
+              <path d="M28 40 q-10 -3 -10 3 t10 4"/>
+              <path d="M28 56 q-10 -3 -10 3 t10 4"/>
+              <path d="M28 72 q-10 -3 -10 3 t10 4"/>
+            </g>
+            <g fill="#f6f1e2">
+              <circle cx="31" cy="26" r="4"/><circle cx="31" cy="42" r="4"/><circle cx="31" cy="58" r="4"/><circle cx="31" cy="74" r="4"/>
+              <circle cx="31" cy="26" r="1.6" fill="#c9bfa4"/><circle cx="31" cy="42" r="1.6" fill="#c9bfa4"/>
+              <circle cx="31" cy="58" r="1.6" fill="#c9bfa4"/><circle cx="31" cy="74" r="1.6" fill="#c9bfa4"/>
+            </g>
+          </g>
+        </svg>
+      </button>
+      <button class="project-card folder-icon icon-spatula" data-project="project-5" style="--i:4">
+        <!-- 锅铲（重绘自参考图：奶油铲头+蓝孔+绿箍+蓝柄+黄垫+红环） -->
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="project-5">
+          <defs>
+            <linearGradient id="g5hd" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#f9f2e0"/><stop offset="1" stop-color="#eddfc2"/>
+            </linearGradient>
+            <linearGradient id="g5hl" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#9cc3ec"/><stop offset="1" stop-color="#7fabe0"/>
+            </linearGradient>
+          </defs>
+          <path d="M36 8 h28 q6 0 6 8 l-2 30 q-1 14 -18 14 t-18 -14 l-2 -30 q0 -8 6 -8 Z" fill="url(#g5hd)" stroke="#dccfab" stroke-width="1.5"/>
+          <g fill="#9cc3ec">
+            <rect x="41" y="16" width="7" height="30" rx="3.5"/>
+            <rect x="50" y="16" width="7" height="32" rx="3.5"/>
+            <rect x="59" y="16" width="7" height="30" rx="3.5"/>
+          </g>
+          <path d="M46 60 h8 l-2 8 h-4 Z" fill="#eddfc2"/>
+          <rect x="42" y="67" width="16" height="6" rx="3" fill="#8fc98a"/>
+          <path d="M44 73 h12 q4 14 -1 22 q-5 6 -10 0 q-5 -8 -1 -22 Z" fill="url(#g5hl)"/>
+          <ellipse cx="50" cy="82" rx="5" ry="9" fill="#f2cf6b"/>
+          <circle cx="50" cy="94" r="5" fill="#e8766a"/><circle cx="50" cy="94" r="2.2" fill="#f6f1e2"/>
+        </svg>
+      </button>
+    </div>
+    <!-- FolderFront：最上层亚克力前面板（点击展开/收回），半透明压住图标下半 -->
+    <div class="folder-front" id="folderFront" role="button" tabindex="0" aria-label="文件夹"></div>
+  </div>
 </div>
 
 <!-- 唱片机：毛玻璃 + SVG 重构主体 -->
@@ -276,7 +502,7 @@
 
 <!-- 打字机：毛玻璃 + SVG 重构主体（paper 分组独立，后期做滚轮滚动） -->
 <div id="typeOverlay" data-page-node-id="YXeXcYGDQtCreqLP1Ljsdu">
-  <svg viewBox="0 0 440 520" xmlns="http://www.w3.org/2000/svg" aria-label="打字机">
+  <svg viewBox="0 33 440 487" xmlns="http://www.w3.org/2000/svg" aria-label="打字机">
     <defs>
       <linearGradient id="twBody" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#f5edD5"/><stop offset="1" stop-color="#e9dcbc"/>
@@ -287,56 +513,47 @@
     </defs>
     <!-- 纸带（独立分组：后期随滚轮上下滚动） -->
     <g id="twPaper">
-      <rect x="92" y="0" width="256" height="302" fill="#faf6ea"/>
-      <rect x="92" y="0.5" width="255" height="301" fill="none" stroke="#e9e1c9" stroke-width="1.5"/>
+      <rect x="56" y="33" width="328" height="300" fill="#faf6ea"/>
+      <rect x="56" y="33.5" width="327" height="299" fill="none" stroke="#e9e1c9" stroke-width="1.5"/>
     </g>
     <!-- 字车导轨 -->
-    <rect x="112" y="298" width="216" height="17" rx="8.5" fill="url(#twRail)"/>
-    <rect x="146" y="287" width="27" height="14" rx="5" fill="#3c3c3c"/>
-    <rect x="267" y="287" width="27" height="14" rx="5" fill="#3c3c3c"/>
+    <rect x="96" y="329" width="248" height="16" rx="8" fill="url(#twRail)"/>
+    <rect x="130" y="318" width="27" height="14" rx="5" fill="#3c3c3c"/>
+    <rect x="283" y="318" width="27" height="14" rx="5" fill="#3c3c3c"/>
     <!-- 两侧墨带卷轴（绿） -->
     <g>
-      <circle cx="50" cy="332" r="37" fill="#7db98d"/>
-      <circle cx="50" cy="332" r="23" fill="#5da271"/>
-      <circle cx="50" cy="332" r="7" fill="#3f7a52"/>
-      <circle cx="390" cy="332" r="37" fill="#7db98d"/>
-      <circle cx="390" cy="332" r="23" fill="#5da271"/>
-      <circle cx="390" cy="332" r="7" fill="#3f7a52"/>
+      <circle cx="44" cy="353" r="28" fill="#7db98d"/>
+      <circle cx="44" cy="353" r="18" fill="#5da271"/>
+      <circle cx="44" cy="353" r="6" fill="#3f7a52"/>
+      <circle cx="396" cy="353" r="28" fill="#7db98d"/>
+      <circle cx="396" cy="353" r="18" fill="#5da271"/>
+      <circle cx="396" cy="353" r="6" fill="#3f7a52"/>
     </g>
-    <!-- 换行扳手 -->
-    <path d="M80 322 L46 374 L30 368" fill="none" stroke="#cbcbcb" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-    <!-- 机身 -->
-    <path d="M26 354 q0 -20 22 -20 h344 q22 0 22 20 V520 H26 Z" fill="url(#twBody)" stroke="#d9c9a2" stroke-width="2"/>
-    <rect x="26" y="334" width="388" height="8" fill="#d9cba6" opacity=".7"/>
     <!-- 导纸板 -->
-    <path d="M194 334 h52 v16 q0 10 -10 10 h-32 q-10 0 -10 -10 Z" fill="#cfcfcf" stroke="#9f9f9f" stroke-width="1.5"/>
+    <path d="M196 339 h48 v15 q0 9 -10 9 h-28 q-10 0 -10 -9 Z" fill="#cfcfcf" stroke="#9f9f9f" stroke-width="1.5"/>
+    <!-- 机身（上窄下宽梯形，加宽、矮身） -->
+    <path d="M76 368 L364 368 Q382 368 390 386 L414 488 Q416 505 396 505 L44 505 Q24 505 26 488 L50 386 Q58 368 76 368 Z" fill="url(#twBody)" stroke="#d9c9a2" stroke-width="2"/>
+    <rect x="76" y="370" width="288" height="7" fill="#d9cba6" opacity=".7"/>
     <!-- 字锤扇形 -->
     <g stroke="#33332e" stroke-width="5" stroke-linecap="round">
-      <line x1="220" y1="400" x2="156" y2="356"/><line x1="220" y1="400" x2="176" y2="346"/>
-      <line x1="220" y1="400" x2="198" y2="340"/><line x1="220" y1="400" x2="220" y2="338"/>
-      <line x1="220" y1="400" x2="242" y2="340"/><line x1="220" y1="400" x2="264" y2="346"/>
-      <line x1="220" y1="400" x2="284" y2="356"/>
+      <line x1="220" y1="412" x2="156" y2="382"/><line x1="220" y1="412" x2="176" y2="374"/>
+      <line x1="220" y1="412" x2="198" y2="370"/><line x1="220" y1="412" x2="220" y2="370"/>
+      <line x1="220" y1="412" x2="242" y2="370"/><line x1="220" y1="412" x2="264" y2="374"/>
+      <line x1="220" y1="412" x2="284" y2="382"/>
     </g>
-    <path d="M160 402 Q220 374 280 402 L258 428 Q220 410 182 428 Z" fill="#3a3a34"/>
+    <path d="M160 414 Q220 386 280 414 L258 440 Q220 422 182 440 Z" fill="#3a3a34"/>
     <!-- 色带卷轴 -->
-    <circle cx="186" cy="400" r="13" fill="#8d8d8d"/><circle cx="186" cy="400" r="5" fill="#5f5f5f"/>
-    <circle cx="254" cy="400" r="13" fill="#8d8d8d"/><circle cx="254" cy="400" r="5" fill="#5f5f5f"/>
-    <!-- 功能按钮（红/橙） -->
-    <circle cx="346" cy="430" r="11" fill="#d9483b"/>
-    <circle cx="374" cy="430" r="11" fill="#e8a33d"/>
-    <!-- 后排按键 -->
+    <circle cx="186" cy="412" r="13" fill="#8d8d8d"/><circle cx="186" cy="412" r="5" fill="#5f5f5f"/>
+    <circle cx="254" cy="412" r="13" fill="#8d8d8d"/><circle cx="254" cy="412" r="5" fill="#5f5f5f"/>
+    <!-- 功能按钮（红/黄） -->
+    <circle cx="346" cy="436" r="11" fill="#d9483b"/>
+    <circle cx="374" cy="436" r="11" fill="#f0b429"/>
+    <!-- 单排按键 -->
     <g stroke="#d6c8a4" stroke-width="2">
-      <circle cx="84" cy="478" r="17" fill="#7fb98a"/>
-      <circle cx="130" cy="478" r="17" fill="#f2e8cd"/><circle cx="176" cy="478" r="17" fill="#f2e8cd"/>
-      <circle cx="222" cy="478" r="17" fill="#f2e8cd"/><circle cx="268" cy="478" r="17" fill="#f2e8cd"/>
-      <circle cx="314" cy="478" r="17" fill="#f2e8cd"/><circle cx="360" cy="478" r="17" fill="#7fb98a"/>
-    </g>
-    <!-- 前排按键（底部被页面边缘裁切） -->
-    <g stroke="#d6c8a4" stroke-width="2">
-      <circle cx="106" cy="524" r="21" fill="#7fb98a"/>
-      <circle cx="158" cy="524" r="21" fill="#f2e8cd"/><circle cx="210" cy="524" r="21" fill="#f2e8cd"/>
-      <circle cx="262" cy="524" r="21" fill="#f2e8cd"/><circle cx="314" cy="524" r="21" fill="#f2e8cd"/>
-      <circle cx="366" cy="524" r="21" fill="#7fb98a"/>
+      <circle cx="84" cy="466" r="16" fill="#7fb98a"/>
+      <circle cx="128" cy="466" r="16" fill="#f2e8cd"/><circle cx="172" cy="466" r="16" fill="#f2e8cd"/>
+      <circle cx="216" cy="466" r="16" fill="#f2e8cd"/><circle cx="260" cy="466" r="16" fill="#f2e8cd"/>
+      <circle cx="304" cy="466" r="16" fill="#f2e8cd"/><circle cx="348" cy="466" r="16" fill="#7fb98a"/>
     </g>
   </svg>
 </div>
@@ -1163,6 +1380,8 @@ function goHome() {
   state.mode = 'home';
   ['laptopOverlay', 'booksOverlay', 'recordOverlay', 'typeOverlay']
     .forEach(id => document.getElementById(id).classList.remove('show'));
+  const fs = document.getElementById('folderScene');
+  if (fs) fs.classList.remove('open');   // 离开书本浮层时文件夹回到收起态
   tag.classList.remove('show');
 }
 
@@ -1226,8 +1445,32 @@ document.getElementById('npClose').addEventListener('click', goHome);
 document.getElementById('laptopOverlay').addEventListener('click', (e) => {
   if (e.target === document.getElementById('laptopOverlay')) goHome();
 });
-['booksOverlay', 'recordOverlay', 'typeOverlay'].forEach(id => {
+['recordOverlay', 'typeOverlay'].forEach(id => {
   document.getElementById(id).addEventListener('click', goHome);
+});
+
+/* ===== 书本浮层：FolderScene 卡片交互（CSS class 驱动，不用 setTimeout） ===== */
+/* 项目详情页未实现：先保留接口，后续接入时替换此函数体 */
+function openProject(projectId) {
+  console.log('[openProject]', projectId);
+}
+const folderScene = document.getElementById('folderScene');
+/* 点击前面板：展开 / 收回 */
+document.getElementById('folderFront').addEventListener('click', (e) => {
+  e.stopPropagation();
+  folderScene.classList.toggle('open');
+});
+/* 单张卡片：独立可点，阻止冒泡（不触发收回/关闭） */
+folderScene.querySelectorAll('.project-card').forEach(card => {
+  card.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openProject(card.dataset.project);
+  });
+});
+/* Overlay 空白区域：展开态 → 收回卡片；收起态 → 返回房间（保留原有行为） */
+document.getElementById('booksOverlay').addEventListener('click', () => {
+  if (folderScene.classList.contains('open')) folderScene.classList.remove('open');
+  else goHome();
 });
 
 /* ================= 动画循环 ================= */
